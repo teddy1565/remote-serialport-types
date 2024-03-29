@@ -13,6 +13,7 @@ export abstract class AbsRemoteSerialServerSocket {
 
     abstract emit(channel: SocketServerSideEmitChannel, message: SocketServerSideEmitPayloadType): void;
     abstract on(channel: SocketClientSideEmitChannel, listener: (data: SocketClientSideEmitPayloadType) => void): void;
+    abstract once(channel: SocketClientSideEmitChannel, listener: (data: SocketClientSideEmitPayloadType) => void): void;
 }
 
 export abstract class AbsRemoteSerialServerSocketNamespace<T extends AbsRemoteSerialServerSocket> {
