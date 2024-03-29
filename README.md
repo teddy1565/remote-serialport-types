@@ -1,2 +1,5 @@
 # remote-serialport-types
-types for remote-serialport-server &amp; remote-serialport-client
+
+## Introduction
+
+types for remote-serialport-server & remote-serialport-client
