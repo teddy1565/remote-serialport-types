@@ -29,16 +29,31 @@ export abstract class AbsRemoteSerialServer<T extends AbsRemoteSerialServerSocke
     protected abstract SERVER_PORT: number;
     protected abstract io: Server;
 
+    /**
+     * Create a new remote serial server socket instance
+     * @param socket - socket.io socket instance
+     */
     protected abstract create_remote_serial_server_socket_port(socket: Socket): T;
 
+    /**
+     * Create a new remote serial server socket namespace instance
+     * @param namespace - socket.io namespace instance
+     */
     protected abstract create_remote_serial_server_socket_namespace(namespace: Namespace): U;
 
-    protected socket_map: Map<string, T> = new Map();
-
+    /**
+     * Listen for incoming connections on the server
+     * @param serverport - server port number
+     */
     public listen(serverport: number = this.SERVER_PORT): void {
         this.io.listen(serverport);
     }
 
+    /**
+     * Create a new remote serial server socket instance
+     * @param namespace - namespace to listen for incoming connections
+     * @returns remote serial server socket namespace instance
+     */
     public of(namespace: string | RegExp): U {
 
         const namespaceInstance = this.io.of(namespace);
