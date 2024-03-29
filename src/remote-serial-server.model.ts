@@ -110,7 +110,7 @@ export abstract class AbsRemoteSerialServer<T extends AbsRemoteSerialServerSocke
      * @param namespace - namespace to listen for incoming connections
      * @returns remote serial server socket namespace instance
      */
-    public of(namespace: string | RegExp): U {
+    public of(namespace: string | RegExp = this.SERIALPORT_NAMESPACE_REGEXP): U {
 
         const namespaceInstance = this.io.of(namespace);
         return this.create_remote_serial_server_socket_namespace(namespaceInstance);
