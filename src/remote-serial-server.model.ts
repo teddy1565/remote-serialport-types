@@ -1,17 +1,24 @@
 import { ServerOptions, Server, Namespace, Socket } from "socket.io";
 
-import { SocketServerSideEmitChannel, SocketServerSideEmitPayloadCode } from "./index";
+import { SocketServerSideEmitChannel,
+    SocketServerSideEmitPayloadCode,
+    SocketClientSideEmitChannel,
+    SocketIONamespaceOnEvent,
+    SocketServerSideEmitPayloadType,
+    SocketClientSideEmitPayloadCode,
+    SocketClientSideEmitPayloadType } from "./index";
 
 export abstract class AbsRemoteSerialServerSocket {
     protected abstract _socket: Socket;
 
-    abstract emit(channel: SocketServerSideEmitChannel, message: SocketServerSideEmitPayloadCode | Buffer | ArrayBuffer | Array<number>): void;
+    abstract emit(channel: SocketServerSideEmitChannel, message: SocketServerSideEmitPayloadType): void;
+    abstract on(channel: SocketClientSideEmitChannel, listener: (data: SocketClientSideEmitPayloadType) => void): void;
 }
 
 export abstract class AbsRemoteSerialServerSocketNamespace<T extends AbsRemoteSerialServerSocket> {
     protected abstract _namespace: Namespace;
 
-    abstract on(channel: SocketServerSideEmitChannel, listener: (socket: T) => void): void;
+    abstract on(channel: SocketIONamespaceOnEvent, listener: (socket: T) => void): void;
 }
 
 
