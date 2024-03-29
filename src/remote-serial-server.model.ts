@@ -64,6 +64,38 @@ export abstract class AbsRemoteSerialServerSocket {
     get nsp() {
         return this._socket.nsp;
     }
+
+    /**
+     * Get the serial port path, Use Default filter regex
+     */
+    get serialport_path(): string {
+        return this.get_serial_path();
+    }
+
+    /**
+     * Get the serial port path, Because socket.io namespace rule
+     *
+     * On Windows, the serial port path is like `COM1`, `COM2`, etc.
+     *
+     * On Linux, the serial port path is like `/dev/ttyUSB0`, `/dev/ttyUSB1`, etc.
+     *
+     * but the socket.io namespace rule is like `/COM1`, `/COM2`, etc.
+     *
+     * so we need to convert the serial port path to the socket.io namespace rule
+     * @param filter_regex - regular expression to filter the serial port path
+     */
+    public get_serial_path(filter_regex: string | RegExp = /^(\/COM)[0-9]+$/): string {
+        /**
+         * socket.io connection namespace equals to the serial port path
+         */
+        const origin_namespace = this._socket.nsp.name;
+
+        if (origin_namespace.match(filter_regex) !== null) {
+            return origin_namespace.replace("/", "");
+        }
+
+        return origin_namespace;
+    }
 }
 
 export abstract class AbsRemoteSerialServerSocketNamespace<T extends AbsRemoteSerialServerSocket> {
