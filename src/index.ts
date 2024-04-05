@@ -59,7 +59,12 @@ export type SocketServerSideEmitPayloadCode = SocketServerSideEmitPayloadCode_Se
 | SocketServerSideEmitPayloadCode_SerialPort_Error
 | SocketServerSideEmitPayloadCode_SerialPort_Found;
 
-export type SocketServerSideEmitPayloadType = SocketServerSideEmitPayloadCode | Buffer | ArrayBuffer | Array<number>;
+export interface SocketServerSideEmitPayload {
+    code: SocketServerSideEmitPayloadCode;
+    message: string;
+}
+
+export type SocketServerSideEmitPayloadType = SocketServerSideEmitPayload | Buffer | ArrayBuffer | Array<number>;
 
 
 export type SocketClientSideEmitChannel_SerialPortAction_Open = "serialport_open";
@@ -70,17 +75,34 @@ export type SocketClientSideEmitChannel = SocketClientSideEmitChannel_SerialPort
 | SocketClientSideEmitChannel_SerialPortAction_Close
 | SocketClientSideEmitChannel_SerialPortAction_SendPacket;
 
-export type SocketClientSideEmitPayloadCode_SerialPort_Open = OpenSerialPortOptions;
-export type SocketClientSideEmitPayloadCode_SerialPort_Close = "serialport_close_options";
-export type SocketClientSideEmitPayloadCode_SerialPort_SendPacket = Array<number> | Buffer;
+export interface SocketClientSideEmitPayload_SerialPort_Open {
+    code: "serialport_open";
+    data: OpenSerialPortOptions;
+}
+
+export interface SocketClientSideEmitPayload_SerialPort_Close {
+    code: "serialport_close";
+
+    /**
+     * Serialport path (But it will be ignored by the server-side)
+     */
+    data: string;
+}
+
+export interface SocketClientSideEmitPayload_SerialPort_SendPacket {
+    code: "serialport_send_packet";
+    data: Array<number> | Buffer;
+}
 
 /**
  * Client-side emit to server-side
  *
  * Server-side should listen SocketClientSideEmitChannel and handle payload type according to the channel.
+ *
+ * It Different with SocketServerSidePayload
  */
-export type SocketClientSideEmitPayloadCode = SocketClientSideEmitPayloadCode_SerialPort_Open
-| SocketClientSideEmitPayloadCode_SerialPort_Close
-| SocketClientSideEmitPayloadCode_SerialPort_SendPacket;
+export type SocketClientSideEmitPayload = SocketClientSideEmitPayload_SerialPort_Open
+| SocketClientSideEmitPayload_SerialPort_Close
+| SocketClientSideEmitPayload_SerialPort_SendPacket;
 
-export type SocketClientSideEmitPayloadType = SocketClientSideEmitPayloadCode | Buffer | ArrayBuffer | Array<number>;
+export type SocketClientSideEmitPayloadType = SocketClientSideEmitPayload | Buffer | ArrayBuffer | Array<number>;

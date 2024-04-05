@@ -1,11 +1,11 @@
 import { ServerOptions, Server, Namespace, Socket } from "socket.io";
 
 import { SocketServerSideEmitChannel,
-    SocketServerSideEmitPayloadCode,
+    SocketServerSideEmitPayload,
     SocketClientSideEmitChannel,
     SocketIONamespaceOnEvent,
     SocketServerSideEmitPayloadType,
-    SocketClientSideEmitPayloadCode,
+    SocketClientSideEmitPayload,
     SocketClientSideEmitPayloadType } from "./index";
 
 export abstract class AbsRemoteSerialServerSocket {
