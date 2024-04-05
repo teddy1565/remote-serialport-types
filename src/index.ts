@@ -174,4 +174,5 @@ export interface SocketClientSideEmitPayload_SerialPort_Handshake {
  */
 export type SocketClientSideEmitPayload = SocketClientSideEmitPayload_SerialPort_Open
 | SocketClientSideEmitPayload_SerialPort_Close
-| SocketClientSideEmitPayload_SerialPort_SendPacket;
+| SocketClientSideEmitPayload_SerialPort_SendPacket
+| SocketClientSideEmitPayload_SerialPort_Handshake;
