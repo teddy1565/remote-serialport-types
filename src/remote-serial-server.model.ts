@@ -125,6 +125,10 @@ export abstract class AbsRemoteSerialServer<T extends AbsRemoteSerialServerSocke
 
     /**
      * Create a new remote serial server socket namespace instance
+     *
+     * When implementing this method, becareful if a same socket.id want access same serial port.
+     *
+     * That means, a same socket.id accesse same serial port. You should return the same instance.
      * @param namespace - socket.io namespace instance
      */
     protected abstract create_remote_serial_server_socket_namespace(namespace: Namespace): U;
