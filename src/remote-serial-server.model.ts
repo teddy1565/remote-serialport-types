@@ -138,7 +138,7 @@ export abstract class AbsRemoteSerialServer<T extends AbsRemoteSerialServerSocke
     }
 
     /**
-     * Create a new remote serial server socket instance
+     * Create a new remote serial server socket instance, Namespace is unique. If there are duplicate namespaces, only the first one will be the main one.
      * @param namespace - namespace to listen for incoming connections
      * @returns remote serial server socket namespace instance
      */
