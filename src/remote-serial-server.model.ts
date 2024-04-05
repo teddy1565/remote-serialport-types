@@ -4,9 +4,7 @@ import { SocketServerSideEmitChannel,
     SocketServerSideEmitPayload,
     SocketClientSideEmitChannel,
     SocketIONamespaceOnEvent,
-    SocketServerSideEmitPayloadType,
-    SocketClientSideEmitPayload,
-    SocketClientSideEmitPayloadType } from "./index";
+    SocketClientSideEmitPayload } from "./index";
 
 export abstract class AbsRemoteSerialServerSocket {
     protected abstract _socket: Socket;
@@ -17,21 +15,21 @@ export abstract class AbsRemoteSerialServerSocket {
      * @param channel Name of the channel
      * @param message Values to send to listeners of this event
      */
-    abstract emit(channel: SocketServerSideEmitChannel, message: SocketServerSideEmitPayloadType): void;
+    abstract emit(channel: SocketServerSideEmitChannel, message: SocketServerSideEmitPayload): void;
     /**
      * Adds the `listener` function as an event listener for `channel`.
      *
      * @param channel Name of the channel
      * @param listener Callback function
      */
-    abstract on(channel: SocketClientSideEmitChannel, listener: (data: SocketClientSideEmitPayloadType) => void): void;
+    abstract on(channel: SocketClientSideEmitChannel, listener: (data: SocketClientSideEmitPayload) => void): void;
     /**
      * Adds a one-time `listener` function as an event listener for `channel`.
      *
      * @param channel Name of the channel
      * @param listener Callback function
      */
-    abstract once(channel: SocketClientSideEmitChannel, listener: (data: SocketClientSideEmitPayloadType) => void): void;
+    abstract once(channel: SocketClientSideEmitChannel, listener: (data: SocketClientSideEmitPayload) => void): void;
     /**
      * Disconnects this client.
      *
