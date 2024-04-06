@@ -74,7 +74,7 @@ export abstract class AbsRemoteSerialportClient {
      * Connect to the server
      * @param namesapce - The namespace of the server, Example: /dev/ttyUSB0 or COM1...
      * @param open_options - Serial Port Open Options
-     * @returns
+     * @returns - return RemoteSerialportClientSocket Instance
      */
     abstract connect(namesapce: string, open_options: OpenSerialPortOptions): AbsRemoteSerialportClientSocket;
 
