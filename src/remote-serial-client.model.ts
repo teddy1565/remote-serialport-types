@@ -79,8 +79,4 @@ export abstract class AbsRemoteSerialportClient {
     abstract connect(namesapce: string, open_options: OpenSerialPortOptions): AbsRemoteSerialportClientSocket;
 
     abstract disconnect(): void;
-
-    abstract on(event: SocketServerSideEmitChannel, callback: (data: SocketServerSideEmitPayload) => void): void;
-
-    abstract once(event: SocketServerSideEmitChannel, callback: (data: SocketServerSideEmitPayload) => void): void;
 }
