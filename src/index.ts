@@ -81,10 +81,7 @@ export interface SocketServerSideEmitPayload_SerialPort_Close {
     message: string;
 }
 
-export interface SocketServerSideEmitPayload_SerialPort_Packet {
-    code: "serialport_packet";
-    message: Buffer | Array<number>;
-}
+export type SocketServerSideEmitPayload_SerialPort_Packet = Buffer | Array<number>;
 
 export interface SocketServerSideEmitPayload_SerialPort_Error {
     code: "serialport_error";
