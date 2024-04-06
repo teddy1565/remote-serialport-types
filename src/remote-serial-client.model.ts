@@ -13,6 +13,11 @@ import { SocketServerSideEmitChannel,
     SocketIONamespaceOnEvent,
     SocketClientSideEmitPayload } from "./index";
 
+export interface OpenOptoinsForSerialPortStream extends Partial<OpenOptions> {
+    path?: string;
+    baudRate: number;
+}
+
 /**
  * a package that encapsulation a serial port stream instance
  */
@@ -20,11 +25,13 @@ export abstract class AbsRemoteSerialportClientPortInstance {
 
     protected abstract mock_binding: MockBindingInterface;
 
+    protected abstract port_path: string;
+
     constructor() {
 
     }
 
-    public abstract get_port(open_options: OpenOptions<BindingInterface>): SerialPortStream;
+    public abstract get_port(open_options: OpenOptoinsForSerialPortStream): SerialPortStream;
 }
 
 export abstract class AbsRemoteSerialportClientSocket {
