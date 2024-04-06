@@ -2,11 +2,32 @@ import { Manager, Socket } from "socket.io-client";
 
 import { OpenSerialPortOptions } from "./serialport";
 
+import { BindingInterface } from "@serialport/bindings-interface";
+import { SerialPortStream, OpenOptions } from "@serialport/stream";
+
+import { MockBindingInterface, CreatePortOptions } from "@serialport/binding-mock";
+
 import { SocketServerSideEmitChannel,
     SocketServerSideEmitPayload,
     SocketClientSideEmitChannel,
     SocketIONamespaceOnEvent,
     SocketClientSideEmitPayload } from "./index";
+
+/**
+ * a package that encapsulation a serial port stream instance
+ */
+export abstract class AbsRemoteSerialportClientPortInstance {
+
+    protected abstract mock_binding: MockBindingInterface;
+
+    protected abstract open_options: OpenOptions<BindingInterface>;
+
+    constructor() {
+
+    }
+
+    public abstract get_port(): SerialPortStream;
+}
 
 export abstract class AbsRemoteSerialportClientSocket {
     protected abstract _socket: Socket;
@@ -39,6 +60,13 @@ export abstract class AbsRemoteSerialportClientSocket {
      * @param close
      */
     abstract disconnect(close?: boolean): void;
+
+    /**
+     * Create A Serial Port Mock Binding
+     * @param path - Specify a local serialport path, The remote serialport data will mapping to this path
+     * @param opt - Create Port Options
+     */
+    abstract create_port(path: string, opt?: CreatePortOptions): AbsRemoteSerialportClientPortInstance;
 }
 
 
