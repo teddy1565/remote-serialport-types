@@ -23,6 +23,8 @@ export interface IRemoteSerialportClient {
 export abstract class AbsRemoteSerialportClientSocket {
     protected abstract _socket: Socket;
 
+    protected abstract _open_options: OpenSerialPortOptions;
+
     /**
      * Send Message to Server-Side
      * @param channel
