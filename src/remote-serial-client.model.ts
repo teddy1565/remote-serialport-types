@@ -20,13 +20,11 @@ export abstract class AbsRemoteSerialportClientPortInstance {
 
     protected abstract mock_binding: MockBindingInterface;
 
-    protected abstract open_options: OpenOptions<BindingInterface>;
-
     constructor() {
 
     }
 
-    public abstract get_port(): SerialPortStream;
+    public abstract get_port(open_options: OpenOptions<BindingInterface>): SerialPortStream;
 }
 
 export abstract class AbsRemoteSerialportClientSocket {
