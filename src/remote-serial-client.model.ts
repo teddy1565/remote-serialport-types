@@ -8,19 +8,6 @@ import { SocketServerSideEmitChannel,
     SocketIONamespaceOnEvent,
     SocketClientSideEmitPayload } from "./index";
 
-export interface IRemoteSerialportClient {
-    /**
-     * Connect to the server
-     * @param namesapce - Just Input the namespace, because server host input in the constructor
-     * @param open_options - Serial Port Open Options
-     * @returns - Socket
-     */
-    connect: (namesapce: string, open_options: OpenSerialPortOptions) => AbsRemoteSerialportClientSocket;
-    disconnect: () => void;
-    on: (event: SocketServerSideEmitChannel, callback: (...args: any[]) => void) => void;
-    once: (event: SocketServerSideEmitChannel, callback: (...args: any[]) => void) => void;
-}
-
 export abstract class AbsRemoteSerialportClientSocket {
     protected abstract _socket: Socket;
 
@@ -55,7 +42,7 @@ export abstract class AbsRemoteSerialportClientSocket {
 }
 
 
-export abstract class AbsRemoteSerialportClient implements IRemoteSerialportClient {
+export abstract class AbsRemoteSerialportClient {
 
 
     /**
