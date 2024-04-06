@@ -71,9 +71,9 @@ export abstract class AbsRemoteSerialportClient {
     }
 
     /**
-     * Connect to the server
+     * Open Serialport Path, namespace serial path will override open_options path
      * @param namesapce - The namespace of the server, Example: /dev/ttyUSB0 or COM1...
-     * @param open_options - Serial Port Open Options
+     * @param open_options - Serial Port Open Options, the path will be ignored
      * @returns - return RemoteSerialportClientSocket Instance
      */
     abstract connect(namesapce: string, open_options: OpenSerialPortOptions): AbsRemoteSerialportClientSocket;
