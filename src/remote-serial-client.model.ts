@@ -12,7 +12,7 @@ export interface IRemoteSerialportClient {
      * @param namesapce - Just Input the namespace, because server host input in the constructor
      * @returns - Socket
      */
-    connect: (namesapce: string) => Socket;
+    connect: (namesapce: string) => AbsRemoteSerialportClientSocket;
     disconnect: () => void;
     on: (event: SocketServerSideEmitChannel, callback: (...args: any[]) => void) => void;
 }
@@ -82,7 +82,7 @@ export abstract class AbsRemoteSerialportClient implements IRemoteSerialportClie
      * @param namesapce - The namespace of the server, Example: /dev/ttyUSB0 or COM1...
      * @returns
      */
-    abstract connect(namesapce: string): Socket;
+    abstract connect(namesapce: string): AbsRemoteSerialportClientSocket;
 
     abstract disconnect(): void;
 
