@@ -18,6 +18,7 @@ export interface IRemoteSerialportClient {
     connect: (namesapce: string, open_options: OpenSerialPortOptions) => AbsRemoteSerialportClientSocket;
     disconnect: () => void;
     on: (event: SocketServerSideEmitChannel, callback: (...args: any[]) => void) => void;
+    once: (event: SocketServerSideEmitChannel, callback: (...args: any[]) => void) => void;
 }
 
 export abstract class AbsRemoteSerialportClientSocket {
@@ -93,4 +94,6 @@ export abstract class AbsRemoteSerialportClient implements IRemoteSerialportClie
     abstract disconnect(): void;
 
     abstract on(event: SocketServerSideEmitChannel, callback: (data: SocketServerSideEmitPayload) => void): void;
+
+    abstract once(event: SocketServerSideEmitChannel, callback: (data: SocketServerSideEmitPayload) => void): void;
 }
