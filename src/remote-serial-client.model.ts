@@ -1,5 +1,7 @@
 import { Manager, Socket } from "socket.io-client";
 
+import { OpenSerialPortOptions } from "./serialport";
+
 import { SocketServerSideEmitChannel,
     SocketServerSideEmitPayload,
     SocketClientSideEmitChannel,
@@ -10,9 +12,10 @@ export interface IRemoteSerialportClient {
     /**
      * Connect to the server
      * @param namesapce - Just Input the namespace, because server host input in the constructor
+     * @param open_options - Serial Port Open Options
      * @returns - Socket
      */
-    connect: (namesapce: string) => AbsRemoteSerialportClientSocket;
+    connect: (namesapce: string, open_options: OpenSerialPortOptions) => AbsRemoteSerialportClientSocket;
     disconnect: () => void;
     on: (event: SocketServerSideEmitChannel, callback: (...args: any[]) => void) => void;
 }
@@ -80,9 +83,10 @@ export abstract class AbsRemoteSerialportClient implements IRemoteSerialportClie
     /**
      * Connect to the server
      * @param namesapce - The namespace of the server, Example: /dev/ttyUSB0 or COM1...
+     * @param open_options - Serial Port Open Options
      * @returns
      */
-    abstract connect(namesapce: string): AbsRemoteSerialportClientSocket;
+    abstract connect(namesapce: string, open_options: OpenSerialPortOptions): AbsRemoteSerialportClientSocket;
 
     abstract disconnect(): void;
 
