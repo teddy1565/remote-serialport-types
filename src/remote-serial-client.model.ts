@@ -17,6 +17,37 @@ export interface IRemoteSerialportClient {
     on: (event: SocketServerSideEmitChannel, callback: (...args: any[]) => void) => void;
 }
 
+export abstract class AbsRemoteSerialportClientSocket {
+    protected abstract _socket: Socket;
+
+    /**
+     * Send Message to Server-Side
+     * @param channel
+     * @param message
+     */
+    abstract emit(channel: SocketClientSideEmitChannel, message: SocketClientSideEmitPayload): void;
+
+    /**
+     * Handle Server-Side Emit Event
+     * @param channel
+     * @param listener
+     */
+    abstract on(channel: SocketServerSideEmitChannel, listener: (data: SocketServerSideEmitPayload) => void): void;
+
+    /**
+     * Handle Server-Side Emit Event Once
+     * @param channel
+     * @param listener
+     */
+    abstract once(channel: SocketServerSideEmitChannel, listener: (data: SocketServerSideEmitPayload) => void): void;
+
+    /**
+     * Disconnect the client
+     * @param close
+     */
+    abstract disconnect(close?: boolean): void;
+}
+
 
 export abstract class AbsRemoteSerialportClient implements IRemoteSerialportClient {
 
@@ -32,9 +63,9 @@ export abstract class AbsRemoteSerialportClient implements IRemoteSerialportClie
     protected readonly serialport_check_regexp: RegExp | string;
 
     /**
-     * Socket.io Client Instance
+     * RemoteSerialportClientSocket Instance
      */
-    protected abstract _socket: Socket | null;
+    protected abstract _socket: AbsRemoteSerialportClientSocket | null;
 
 
     /**
@@ -47,7 +78,7 @@ export abstract class AbsRemoteSerialportClient implements IRemoteSerialportClie
     }
 
     /**
-     *
+     * Connect to the server
      * @param namesapce - The namespace of the server, Example: /dev/ttyUSB0 or COM1...
      * @returns
      */
