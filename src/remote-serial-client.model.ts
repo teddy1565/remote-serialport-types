@@ -31,11 +31,14 @@ export abstract class AbsRemoteSerialportClient implements IRemoteSerialportClie
      */
     protected readonly serialport_check_regexp: RegExp | string;
 
-    protected abstract _socket: Socket;
+    /**
+     * Socket.io Client Instance
+     */
+    protected abstract _socket: Socket | null;
 
 
     /**
-     *
+     * Abstract Remote Serialport Client
      * @param server_host - Server Host, Example: ws://localhost:17991
      */
     constructor(server_host: string, serialport_check_regexp: RegExp | string = /^(\/dev\/tty(USB|AMA|ACM)|\/COM)[0-9]+$/) {
