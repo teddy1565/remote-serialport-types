@@ -4,6 +4,7 @@ import { SocketServerSideEmitChannel,
     SocketServerSideEmitPayload,
     SocketClientSideEmitChannel,
     SocketIONamespaceOnEvent,
+    SocketClientSideEmitPayload_SerialPort_SendPacket,
     SocketClientSideEmitPayload } from "./index";
 
 export abstract class AbsRemoteSerialServerSocket {
@@ -16,6 +17,13 @@ export abstract class AbsRemoteSerialServerSocket {
      * @param message Values to send to listeners of this event
      */
     abstract emit(channel: SocketServerSideEmitChannel, message: SocketServerSideEmitPayload): void;
+
+    /**
+     * Handle Client-Side Emit Serialport Write Command
+     * @param channel - serialport write packet channel
+     * @param listener - callback function
+     */
+    abstract on(channel: Extract<SocketClientSideEmitChannel, "serialport_send_packet">, listener: (data: SocketClientSideEmitPayload_SerialPort_SendPacket) => void): void;
     /**
      * Adds the `listener` function as an event listener for `channel`.
      *

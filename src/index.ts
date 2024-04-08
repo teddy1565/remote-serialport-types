@@ -154,10 +154,7 @@ export interface SocketClientSideEmitPayload_SerialPort_Close {
     data: string;
 }
 
-export interface SocketClientSideEmitPayload_SerialPort_SendPacket {
-    code: "serialport_send_packet";
-    data: Array<number> | Buffer;
-}
+export type SocketClientSideEmitPayload_SerialPort_SendPacket = Buffer | Array<number>;
 
 export interface SocketClientSideEmitPayload_SerialPort_Handshake {
     code: "serialport_handshake";

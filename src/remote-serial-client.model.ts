@@ -11,6 +11,7 @@ import { SocketServerSideEmitChannel,
     SocketServerSideEmitPayload,
     SocketClientSideEmitChannel,
     SocketIONamespaceOnEvent,
+    SocketClientSideEmitPayload_SerialPort_SendPacket,
     SocketClientSideEmitPayload } from "./index";
 
 export interface OpenOptoinsForSerialPortStream extends Partial<OpenOptions> {
@@ -39,6 +40,12 @@ export abstract class AbsRemoteSerialportClientSocket {
 
     protected abstract _open_options: OpenSerialPortOptions;
 
+    /**
+     * Send Write Packet to Server-Side
+     * @param channel
+     * @param message
+     */
+    abstract emit(channel: Extract<SocketClientSideEmitChannel, "serialport_send_packet">, message: SocketClientSideEmitPayload_SerialPort_SendPacket): void;
     /**
      * Send Message to Server-Side
      * @param channel
