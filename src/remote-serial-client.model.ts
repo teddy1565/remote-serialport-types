@@ -12,6 +12,9 @@ import { SocketServerSideEmitChannel,
     SocketClientSideEmitChannel,
     SocketIONamespaceOnEvent,
     SocketClientSideEmitPayload_SerialPort_SendPacket,
+    SocketClientSideEmitChannel_SerialPortAction_SendPacket,
+    SocketServerSideEmitPayload_SerialPort_Packet,
+    SocketServerSideEmitChannel_SerialPortPacket,
     SocketClientSideEmitPayload } from "./index";
 
 export interface OpenOptoinsForSerialPortStream extends Partial<OpenOptions> {
@@ -45,27 +48,41 @@ export abstract class AbsRemoteSerialportClientSocket {
      * @param channel
      * @param message
      */
-    abstract emit(channel: Extract<SocketClientSideEmitChannel, "serialport_send_packet">, message: SocketClientSideEmitPayload_SerialPort_SendPacket): void;
+    abstract emit(channel: Extract<SocketClientSideEmitChannel, SocketClientSideEmitChannel_SerialPortAction_SendPacket>, message: SocketClientSideEmitPayload_SerialPort_SendPacket): void;
     /**
      * Send Message to Server-Side
      * @param channel
      * @param message
      */
-    abstract emit(channel: SocketClientSideEmitChannel, message: SocketClientSideEmitPayload): void;
+    abstract emit(channel: Exclude<SocketClientSideEmitChannel, SocketClientSideEmitChannel_SerialPortAction_SendPacket>, message: Exclude<SocketClientSideEmitPayload, SocketClientSideEmitPayload_SerialPort_SendPacket>): void;
 
+
+    /**
+     * Handle Server-Side Emit Packet
+     * @param channel
+     * @param listener
+     */
+    abstract on(channel: Extract<SocketServerSideEmitChannel, SocketServerSideEmitChannel_SerialPortPacket>, listener: (data: Extract<SocketServerSideEmitPayload, SocketServerSideEmitPayload_SerialPort_Packet>) => void): void;
     /**
      * Handle Server-Side Emit Event
      * @param channel
      * @param listener
      */
-    abstract on(channel: SocketServerSideEmitChannel, listener: (data: SocketServerSideEmitPayload) => void): void;
+    abstract on(channel: Exclude<SocketServerSideEmitChannel, SocketServerSideEmitChannel_SerialPortPacket>, listener: (data: Exclude<SocketServerSideEmitPayload, SocketServerSideEmitPayload_SerialPort_Packet>) => void): void;
 
+
+    /**
+     * Handle Server-Side Emit Packet Once
+     * @param channel
+     * @param listener
+     */
+    abstract once(channel: Extract<SocketServerSideEmitChannel, SocketServerSideEmitChannel_SerialPortPacket>, listener: (data: Extract<SocketServerSideEmitPayload, SocketServerSideEmitPayload_SerialPort_Packet>) => void): void;
     /**
      * Handle Server-Side Emit Event Once
      * @param channel
      * @param listener
      */
-    abstract once(channel: SocketServerSideEmitChannel, listener: (data: SocketServerSideEmitPayload) => void): void;
+    abstract once(channel: Exclude<SocketServerSideEmitChannel, SocketServerSideEmitChannel_SerialPortPacket>, listener: (data: Exclude<SocketServerSideEmitPayload, SocketServerSideEmitPayload_SerialPort_Packet>) => void): void;
 
     /**
      * Disconnect the client
