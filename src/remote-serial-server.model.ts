@@ -5,6 +5,7 @@ import { SocketServerSideEmitChannel,
     SocketClientSideEmitChannel,
     SocketIONamespaceOnEvent,
     SocketClientSideEmitPayload_SerialPort_SendPacket,
+    SocketClientSideEmitChannel_SerialPortAction_SendPacket,
     SocketClientSideEmitPayload } from "./index";
 
 export abstract class AbsRemoteSerialServerSocket {
@@ -23,21 +24,28 @@ export abstract class AbsRemoteSerialServerSocket {
      * @param channel - serialport write packet channel
      * @param listener - callback function
      */
-    abstract on(channel: Extract<SocketClientSideEmitChannel, "serialport_send_packet">, listener: (data: SocketClientSideEmitPayload_SerialPort_SendPacket) => void): void;
+    abstract on(channel: Extract<SocketClientSideEmitChannel, SocketClientSideEmitChannel_SerialPortAction_SendPacket>, listener: (data: SocketClientSideEmitPayload_SerialPort_SendPacket) => void): void;
     /**
      * Adds the `listener` function as an event listener for `channel`.
      *
      * @param channel Name of the channel
      * @param listener Callback function
      */
-    abstract on(channel: SocketClientSideEmitChannel, listener: (data: SocketClientSideEmitPayload) => void): void;
+    abstract on(channel: Exclude<SocketClientSideEmitChannel, SocketClientSideEmitChannel_SerialPortAction_SendPacket>, listener: (data: Exclude<SocketClientSideEmitPayload, SocketClientSideEmitPayload_SerialPort_SendPacket>) => void): void;
+
+    /**
+     * Add a one-time `listener` function for the event named `channel`.
+     * @param channel
+     * @param listener
+     */
+    abstract once(channel: Extract<SocketClientSideEmitChannel, SocketClientSideEmitChannel_SerialPortAction_SendPacket>, listener: (data: SocketClientSideEmitPayload_SerialPort_SendPacket) => void): void;
     /**
      * Adds a one-time `listener` function as an event listener for `channel`.
      *
      * @param channel Name of the channel
      * @param listener Callback function
      */
-    abstract once(channel: SocketClientSideEmitChannel, listener: (data: SocketClientSideEmitPayload) => void): void;
+    abstract once(channel: Exclude<SocketClientSideEmitChannel, SocketClientSideEmitChannel_SerialPortAction_SendPacket>, listener: (data: Exclude<SocketClientSideEmitPayload, SocketClientSideEmitPayload_SerialPort_SendPacket>) => void): void;
     /**
      * Disconnects this client.
      *
