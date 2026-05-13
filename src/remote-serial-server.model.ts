@@ -1,6 +1,6 @@
 import { Server, Namespace, Socket } from "socket.io";
 
-import { SerialPortFactory } from "./serialport";
+import { SerialPortFactory, SerialPortListProvider } from "./serialport";
 
 import { RemoteSerialPortState,
     SerialPortPacket,
@@ -26,6 +26,23 @@ import { RemoteSerialPortState,
     SocketClientSideEmitPayload_Mux_Open,
     SocketClientSideEmitPayload_Mux_Close,
     SocketClientSideEmitPayload_Mux_SendPacket,
+    SocketClientSideRpcChannel_Set,
+    SocketClientSideRpcChannel_Update,
+    SocketClientSideRpcChannel_Flush,
+    SocketClientSideRpcChannel_Get,
+    SocketClientSideRpcChannel_List,
+    SocketClientSideRpcChannel_Mux_Set,
+    SocketClientSideRpcChannel_Mux_Update,
+    SocketClientSideRpcChannel_Mux_Flush,
+    SocketClientSideRpcChannel_Mux_Get,
+    SocketClientSideRpcPayload_Set,
+    SocketClientSideRpcPayload_Update,
+    SocketClientSideRpcPayload_Mux_Set,
+    SocketClientSideRpcPayload_Mux_Update,
+    SocketClientSideRpcPayload_Mux_Flush,
+    SocketClientSideRpcPayload_Mux_Get,
+    SocketRpcResponse_Status,
+    SocketRpcResponse_List,
     SocketIONamespaceOnEvent } from "./index";
 
 /**
@@ -46,6 +63,11 @@ export interface RemoteSerialServerOptions {
      * transform data in transit (don't do both, or data is forwarded twice).
      */
     auto_pipe?: boolean;
+    /**
+     * Provider for the `serialport_list` RPC. Default: `() => SerialPort.list()`. Inject a custom one
+     * in tests (the real `SerialPort.list()` does not see `SerialPortMock` ports).
+     */
+    port_list_provider?: SerialPortListProvider;
 }
 
 /**
@@ -102,6 +124,16 @@ export abstract class AbsRemoteSerialServerSocket {
     abstract on(channel: SocketClientSideEmitChannel_Close, listener: () => void): void;
     /** Client sends raw bytes to write to the physical serial port. */
     abstract on(channel: SocketClientSideEmitChannel_SendPacket, listener: (data: SerialPortPacket) => void): void;
+    /** Client requests setting modem control lines / break on the physical port. */
+    abstract on(channel: SocketClientSideRpcChannel_Set, listener: (data: SocketClientSideRpcPayload_Set) => void): void;
+    /** Client requests updating the physical port (e.g. `baudRate`). */
+    abstract on(channel: SocketClientSideRpcChannel_Update, listener: (data: SocketClientSideRpcPayload_Update) => void): void;
+    /** Client requests flushing the physical port's buffers. */
+    abstract on(channel: SocketClientSideRpcChannel_Flush, listener: () => void): void;
+    /** Client requests the physical port's status; respond via the ack callback. */
+    abstract on(channel: SocketClientSideRpcChannel_Get, listener: (data: Record<string, never>, ack: (response: SocketRpcResponse_Status) => void) => void): void;
+    /** Client requests the host's serial port list; respond via the ack callback. */
+    abstract on(channel: SocketClientSideRpcChannel_List, listener: (data: Record<string, never>, ack: (response: SocketRpcResponse_List) => void) => void): void;
 
     /* ---- once (client -> server) ---- */
 
@@ -189,6 +221,16 @@ export abstract class AbsRemoteSerialServerMuxSocket {
     abstract on(channel: SocketClientSideEmitChannel_Mux_Open, listener: (data: SocketClientSideEmitPayload_Mux_Open) => void): void;
     abstract on(channel: SocketClientSideEmitChannel_Mux_Close, listener: (data: SocketClientSideEmitPayload_Mux_Close) => void): void;
     abstract on(channel: SocketClientSideEmitChannel_Mux_SendPacket, listener: (data: SocketClientSideEmitPayload_Mux_SendPacket) => void): void;
+    /** Client requests setting modem control lines / break on a physical port, by `path`. */
+    abstract on(channel: SocketClientSideRpcChannel_Mux_Set, listener: (data: SocketClientSideRpcPayload_Mux_Set) => void): void;
+    /** Client requests updating a physical port, by `path`. */
+    abstract on(channel: SocketClientSideRpcChannel_Mux_Update, listener: (data: SocketClientSideRpcPayload_Mux_Update) => void): void;
+    /** Client requests flushing a physical port's buffers, by `path`. */
+    abstract on(channel: SocketClientSideRpcChannel_Mux_Flush, listener: (data: SocketClientSideRpcPayload_Mux_Flush) => void): void;
+    /** Client requests a physical port's status, by `path`; respond via the ack callback. */
+    abstract on(channel: SocketClientSideRpcChannel_Mux_Get, listener: (data: SocketClientSideRpcPayload_Mux_Get, ack: (response: SocketRpcResponse_Status) => void) => void): void;
+    /** Client requests the host's serial port list; respond via the ack callback. */
+    abstract on(channel: SocketClientSideRpcChannel_List, listener: (data: Record<string, never>, ack: (response: SocketRpcResponse_List) => void) => void): void;
 
     /* ---- once (client -> server) ---- */
 

@@ -1,4 +1,4 @@
-import { OpenSerialPortOptions } from "./serialport";
+import { OpenSerialPortOptions, SetOptions, UpdateOptions, PortStatus, PortInfo } from "./serialport";
 
 /**
  * Wire-protocol version of remote-serialport.
@@ -206,3 +206,85 @@ export type SocketClientSideEmitPayload = SocketClientSideEmitPayload_Open
 | SocketClientSideEmitPayload_Mux_Open
 | SocketClientSideEmitPayload_Mux_Close
 | SocketClientSideEmitPayload_Mux_SendPacket;
+
+/* ============================================================================
+ * Client -> Server RPC (remote serial-port control)
+ *
+ * These address the *physical* port (not the local virtual mock). `set` / `update` / `flush` are
+ * fire-and-forget; `get` / `list` use a socket.io ack callback for the response. They are emitted
+ * with an always-present payload object (even if empty), so the server handler signature is
+ * uniformly `(payload, ack?)`.
+ * ========================================================================== */
+
+/** C->S RPC (namespace mode): set modem control lines / break on the physical port. */
+export type SocketClientSideRpcChannel_Set = "serialport_set";
+/** C->S RPC (namespace mode): update the physical port (e.g. `baudRate`). */
+export type SocketClientSideRpcChannel_Update = "serialport_update";
+/** C->S RPC (namespace mode): flush the physical port's buffers. */
+export type SocketClientSideRpcChannel_Flush = "serialport_flush";
+/** C->S RPC (namespace mode): read the physical port's status; response via ack. */
+export type SocketClientSideRpcChannel_Get = "serialport_get";
+/** C->S RPC: list the serial ports on the server host; response via ack. (Not port-scoped — works in both modes.) */
+export type SocketClientSideRpcChannel_List = "serialport_list";
+/** C->S RPC (mux mode): set modem control lines / break on a physical port, by `path`. */
+export type SocketClientSideRpcChannel_Mux_Set = "serialport_mux_set";
+/** C->S RPC (mux mode): update a physical port, by `path`. */
+export type SocketClientSideRpcChannel_Mux_Update = "serialport_mux_update";
+/** C->S RPC (mux mode): flush a physical port's buffers, by `path`. */
+export type SocketClientSideRpcChannel_Mux_Flush = "serialport_mux_flush";
+/** C->S RPC (mux mode): read a physical port's status, by `path`; response via ack. */
+export type SocketClientSideRpcChannel_Mux_Get = "serialport_mux_get";
+
+export type SocketClientSideRpcChannel = SocketClientSideRpcChannel_Set
+| SocketClientSideRpcChannel_Update
+| SocketClientSideRpcChannel_Flush
+| SocketClientSideRpcChannel_Get
+| SocketClientSideRpcChannel_List
+| SocketClientSideRpcChannel_Mux_Set
+| SocketClientSideRpcChannel_Mux_Update
+| SocketClientSideRpcChannel_Mux_Flush
+| SocketClientSideRpcChannel_Mux_Get;
+
+/* ---- request payloads ---- */
+
+export interface SocketClientSideRpcPayload_Set {
+    options: SetOptions;
+}
+export interface SocketClientSideRpcPayload_Update {
+    options: UpdateOptions;
+}
+/** `serialport_flush` request payload: none meaningful (sent as `{}`). */
+export type SocketClientSideRpcPayload_Flush = Record<string, never>;
+/** `serialport_get` request payload: none meaningful (sent as `{}`). */
+export type SocketClientSideRpcPayload_Get = Record<string, never>;
+/** `serialport_list` request payload: none meaningful (sent as `{}`). */
+export type SocketClientSideRpcPayload_List = Record<string, never>;
+export interface SocketClientSideRpcPayload_Mux_Set {
+    path: string;
+    options: SetOptions;
+}
+export interface SocketClientSideRpcPayload_Mux_Update {
+    path: string;
+    options: UpdateOptions;
+}
+export interface SocketClientSideRpcPayload_Mux_Flush {
+    path: string;
+}
+export interface SocketClientSideRpcPayload_Mux_Get {
+    path: string;
+}
+
+/* ---- ack response payloads ---- */
+
+/** Ack response for `serialport_get` / `serialport_mux_get`. */
+export interface SocketRpcResponse_Status {
+    ok: boolean;
+    status?: PortStatus;
+    message?: string;
+}
+/** Ack response for `serialport_list`. */
+export interface SocketRpcResponse_List {
+    ok: boolean;
+    ports?: PortInfo[];
+    message?: string;
+}

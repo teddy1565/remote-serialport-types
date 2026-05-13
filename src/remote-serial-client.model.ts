@@ -1,6 +1,6 @@
 import { Manager, Socket } from "socket.io-client";
 
-import { OpenSerialPortOptions } from "./serialport";
+import { OpenSerialPortOptions, SetOptions, UpdateOptions, PortStatus, PortInfo } from "./serialport";
 
 import { SerialPortStream, OpenOptions } from "@serialport/stream";
 
@@ -29,7 +29,18 @@ import { RemoteSerialPortState,
     SocketClientSideEmitPayload_Open,
     SocketClientSideEmitPayload_Mux_Open,
     SocketClientSideEmitPayload_Mux_Close,
-    SocketClientSideEmitPayload_Mux_SendPacket } from "./index";
+    SocketClientSideEmitPayload_Mux_SendPacket,
+    SocketClientSideRpcChannel_Set,
+    SocketClientSideRpcChannel_Update,
+    SocketClientSideRpcChannel_Flush,
+    SocketClientSideRpcChannel_Mux_Set,
+    SocketClientSideRpcChannel_Mux_Update,
+    SocketClientSideRpcChannel_Mux_Flush,
+    SocketClientSideRpcPayload_Set,
+    SocketClientSideRpcPayload_Update,
+    SocketClientSideRpcPayload_Mux_Set,
+    SocketClientSideRpcPayload_Mux_Update,
+    SocketClientSideRpcPayload_Mux_Flush } from "./index";
 
 /**
  * Open options passed to a local mock `SerialPortStream` (the virtual port the client app uses).
@@ -99,6 +110,12 @@ export abstract class AbsRemoteSerialportClientSocket {
     abstract emit(channel: SocketClientSideEmitChannel_Open, message: SocketClientSideEmitPayload_Open): void;
     /** Ask the server to close the remote port. */
     abstract emit(channel: SocketClientSideEmitChannel_Close): void;
+    /** Set modem control lines / break on the remote physical port (fire-and-forget). */
+    abstract emit(channel: SocketClientSideRpcChannel_Set, message: SocketClientSideRpcPayload_Set): void;
+    /** Update the remote physical port, e.g. `baudRate` (fire-and-forget). */
+    abstract emit(channel: SocketClientSideRpcChannel_Update, message: SocketClientSideRpcPayload_Update): void;
+    /** Flush the remote physical port's buffers (fire-and-forget). */
+    abstract emit(channel: SocketClientSideRpcChannel_Flush): void;
 
     /* ---- on (server -> client) ---- */
 
@@ -126,6 +143,19 @@ export abstract class AbsRemoteSerialportClientSocket {
 
     /** Ask the server to close the remote port (does not disconnect the socket). */
     abstract close(): void;
+
+    /* ---- remote physical-port control (RPC; the local virtual port's own set/get/update/flush are unaffected) ---- */
+
+    /** Set modem control lines / break on the remote *physical* port. */
+    abstract set_remote(options: SetOptions): void;
+    /** Update the remote *physical* port, e.g. `baudRate`. */
+    abstract update_remote(options: UpdateOptions): void;
+    /** Flush the remote *physical* port's buffers. */
+    abstract flush_remote(): void;
+    /** Read the remote *physical* port's status (CTS / DSR / DCD). */
+    abstract get_remote_status(): Promise<PortStatus>;
+    /** List the serial ports available on the server host (`SerialPort.list()`). */
+    abstract list_ports(): Promise<PortInfo[]>;
 
     /** Disconnect this socket and release its local virtual ports / listeners. */
     abstract disconnect(close?: boolean): void;
@@ -157,6 +187,12 @@ export abstract class AbsRemoteSerialportClientMuxSocket {
     abstract emit(channel: SocketClientSideEmitChannel_Mux_Close, message: SocketClientSideEmitPayload_Mux_Close): void;
     /** Write raw bytes to a remote serial port. */
     abstract emit(channel: SocketClientSideEmitChannel_Mux_SendPacket, message: SocketClientSideEmitPayload_Mux_SendPacket): void;
+    /** Set modem control lines / break on a remote physical port (fire-and-forget). */
+    abstract emit(channel: SocketClientSideRpcChannel_Mux_Set, message: SocketClientSideRpcPayload_Mux_Set): void;
+    /** Update a remote physical port, e.g. `baudRate` (fire-and-forget). */
+    abstract emit(channel: SocketClientSideRpcChannel_Mux_Update, message: SocketClientSideRpcPayload_Mux_Update): void;
+    /** Flush a remote physical port's buffers (fire-and-forget). */
+    abstract emit(channel: SocketClientSideRpcChannel_Mux_Flush, message: SocketClientSideRpcPayload_Mux_Flush): void;
 
     /* ---- on (server -> client) ---- */
 
@@ -177,6 +213,19 @@ export abstract class AbsRemoteSerialportClientMuxSocket {
 
     /** Close a remote port on this mux connection. */
     abstract close(remote_path: string): void;
+
+    /* ---- remote physical-port control (RPC) ---- */
+
+    /** Set modem control lines / break on a remote *physical* port. */
+    abstract set_remote(remote_path: string, options: SetOptions): void;
+    /** Update a remote *physical* port, e.g. `baudRate`. */
+    abstract update_remote(remote_path: string, options: UpdateOptions): void;
+    /** Flush a remote *physical* port's buffers. */
+    abstract flush_remote(remote_path: string): void;
+    /** Read a remote *physical* port's status (CTS / DSR / DCD). */
+    abstract get_remote_status(remote_path: string): Promise<PortStatus>;
+    /** List the serial ports available on the server host (`SerialPort.list()`). */
+    abstract list_ports(): Promise<PortInfo[]>;
 
     /**
      * Map a remote port (already opened, or to be opened) to a local virtual serial port.
