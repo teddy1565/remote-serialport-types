@@ -1,172 +1,208 @@
-
 import { OpenSerialPortOptions } from "./serialport";
 
+/**
+ * Wire-protocol version of remote-serialport.
+ *
+ * The server announces it in the `serialport_handshake` payload; the client checks compatibility.
+ * Bump this on any incompatible change to the channels / payloads below.
+ */
+export const REMOTE_SERIALPORT_PROTOCOL_VERSION = 2;
+
+/**
+ * socket.io namespace-level events the server listens for.
+ */
 export type SocketIONamespaceOnEvent = "connection"
 | "disconnect"
 | "error";
 
 /**
- * Server-side emit to client-side
+ * Lifecycle state of a single remote serial port. Tracked on both server and client side.
  *
- * serialport_event indicates an event from the serial port, like `open`, `close`, `error`, `waiting`, etc.
+ * Connection-level readiness is handled separately by `serialport_handshake`, so there is no
+ * "handshaking" state here.
  */
-export type SocketServerSideEmitChannel_SerialPortEvent = "serialport_event";
-
-/**
- * Server-side emit to client-side
- *
- * serialport_action indicates an action from the server, like `handshake`, etc.
- *
- * e.g. If Server-side want control the serial port, it will emit this channel.
- */
-export type SocketServerSideEmitChannel_SerialPortAction = "serialport_action";
-
-/**
- * Server-side emit to client-side
- *
- * serialport_result indicates the result of an action from the server.
- *
- * e.g. If Client-side want to Extract and Transmit the serial port data, when the server-side finish the action, it will emit this channel.
- */
-export type SocketServerSideEmitChannel_SerialPortResult = "serialport_result";
-
-/**
- * Server-side emit to client-side
- *
- * serialport_packet indicates the serialport buffer packet from the serial port.
- *
- * It is an one-way transmission from server-side to client-side.
- */
-export type SocketServerSideEmitChannel_SerialPortPacket = "serialport_packet";
-
-/**
- * Server-side emit to client-side
- *
- * serialport_handshake indicates the handshake from the server-side to the client-side.
- *
- * Infact, it just tells the client-side that the server-side is ready to handle the client-side.
- */
-export type SocketServerSideEmitChannel_SerialPortHandshake = "serialport_handshake";
-
-/**
- * Server-side emit to client-side
- *
- * serialport_init_result indicates the result of the serial port initialization.
- *
- * e.g. when client-side connect to the server-side, the server-side will emit this channel to indicate the initialization result.
- */
-export type SocketServerSideEmitChannel_SerialPortInitResult = "serialport_init_result";
-
-
-export type SocketServerSideEmitChannel = SocketServerSideEmitChannel_SerialPortEvent
-| SocketServerSideEmitChannel_SerialPortAction
-| SocketServerSideEmitChannel_SerialPortResult
-| SocketServerSideEmitChannel_SerialPortPacket
-| SocketServerSideEmitChannel_SerialPortInitResult
-|SocketServerSideEmitChannel_SerialPortHandshake;
-
-
-export interface SocketServerSideEmitPayload_SerialPort_NotFound {
-    code: "serialport_not_found";
-    message: string;
+export enum RemoteSerialPortState {
+    /** Created, not yet asked to open. */
+    IDLE = "idle",
+    /** `open()` in progress. */
+    OPENING = "opening",
+    /** Open and ready for I/O. */
+    OPEN = "open",
+    /** `close()` in progress. */
+    CLOSING = "closing",
+    /** Closed cleanly. */
+    CLOSED = "closed",
+    /** Failed to open, or errored after opening. `message` carries the detail. */
+    ERROR = "error"
 }
 
-export interface SocketServerSideEmitPayload_SerialPort_Open {
-    code: "serialport_open";
-    message: string;
+/* ============================================================================
+ * Shared payload shapes
+ * ========================================================================== */
+
+/**
+ * Raw serial bytes.
+ *
+ * Used by the namespace-mode packet channels (`serialport_packet` / `serialport_send_packet`),
+ * where the socket connection itself identifies which remote port the bytes belong to, so no
+ * extra addressing is needed in the payload.
+ */
+export type SerialPortPacket = Buffer | Array<number>;
+
+/**
+ * "Open this remote serial port".
+ *
+ * `path` is the *real* remote serial port path on the server host. In namespace mode it usually
+ * equals the socket.io namespace, but when the server runs with `strict_path` disabled it may
+ * differ (the namespace is then just a routing label). In mux mode `path` is the only addressing.
+ */
+export interface SerialPortOpenRequest {
+    path: string;
+    options: OpenSerialPortOptions;
 }
 
-export interface SocketServerSideEmitPayload_SerialPort_Close {
-    code: "serialport_close";
-    message: string;
-}
-
-export type SocketServerSideEmitPayload_SerialPort_Packet = Buffer | Array<number>;
-
-export interface SocketServerSideEmitPayload_SerialPort_Error {
-    code: "serialport_error";
-    message: string;
-}
-
-export interface SocketServerSideEmitPayload_SerialPort_Found {
-    code: "serialport_found";
-    message: string;
-}
-
-export interface SocketServerSideEmitPayload_RemoteSerialServerHandshake {
-    code: "handshake";
-    /**
-     * The Server-side ready handle client-side
-     */
-    data: boolean;
-
-    /**
-     * Message for handshake details
-     */
+/**
+ * A port state change pushed from server to client.
+ */
+export interface SerialPortStateUpdate {
+    state: RemoteSerialPortState;
+    /** Human-readable detail, especially for `ERROR`. */
     message?: string;
 }
 
-export interface SocketServerSideEmitPayload_SerialPort_InitResult {
-    code: "serialport_init_result";
+/* ============================================================================
+ * Server -> Client
+ * ========================================================================== */
 
-    /**
-     * If serial port initialization is successful, it will be `true`. Otherwise, it will be `false`.
-     */
-    data: boolean;
+/* ---- channels ---- */
 
-    /**
-     * Message for initialization details
-     */
+/**
+ * S->C: sent once, right after the connection is established. Carries the server's protocol version.
+ * Replaces the old `{ code: "handshake" }` ping that shared a channel with the client's reply.
+ */
+export type SocketServerSideEmitChannel_Handshake = "serialport_handshake";
+/** S->C (namespace mode): a state change of this connection's remote serial port. */
+export type SocketServerSideEmitChannel_State = "serialport_state";
+/** S->C (namespace mode): raw bytes read from the remote serial port. One-way stream. */
+export type SocketServerSideEmitChannel_Packet = "serialport_packet";
+/** S->C (namespace mode): the remote port can accept writes again (backpressure relief, client -> device direction). */
+export type SocketServerSideEmitChannel_Drain = "serialport_drain";
+/** S->C (mux mode): a state change of a remote serial port, tagged with `path`. */
+export type SocketServerSideEmitChannel_Mux_State = "serialport_mux_state";
+/** S->C (mux mode): raw bytes read from a remote serial port, tagged with `path`. */
+export type SocketServerSideEmitChannel_Mux_Packet = "serialport_mux_packet";
+/** S->C (mux mode): a remote port can accept writes again, tagged with `path`. */
+export type SocketServerSideEmitChannel_Mux_Drain = "serialport_mux_drain";
+
+export type SocketServerSideEmitChannel = SocketServerSideEmitChannel_Handshake
+| SocketServerSideEmitChannel_State
+| SocketServerSideEmitChannel_Packet
+| SocketServerSideEmitChannel_Drain
+| SocketServerSideEmitChannel_Mux_State
+| SocketServerSideEmitChannel_Mux_Packet
+| SocketServerSideEmitChannel_Mux_Drain;
+
+/* ---- payloads ---- */
+
+/** Payload of `serialport_handshake`. */
+export interface SocketServerSideEmitPayload_Handshake {
+    /** Wire-protocol version the server speaks. */
+    protocolVersion: number;
     message?: string;
 }
-
-
-export type SocketServerSideEmitPayload = SocketServerSideEmitPayload_SerialPort_NotFound
-| SocketServerSideEmitPayload_SerialPort_Open
-| SocketServerSideEmitPayload_SerialPort_Close
-| SocketServerSideEmitPayload_SerialPort_Packet
-| SocketServerSideEmitPayload_SerialPort_Error
-| SocketServerSideEmitPayload_SerialPort_Found
-| SocketServerSideEmitPayload_RemoteSerialServerHandshake
-| SocketServerSideEmitPayload_SerialPort_InitResult;
-
-export type SocketClientSideEmitChannel_SerialPortAction_Open = "serialport_open";
-export type SocketClientSideEmitChannel_SerialPortAction_Close = "serialport_close";
-export type SocketClientSideEmitChannel_SerialPortAction_SendPacket = "serialport_send_packet";
-export type SocketClientSideEmitChannel_SerialPort_Handshake = "serialport_handshake";
-
-export type SocketClientSideEmitChannel = SocketClientSideEmitChannel_SerialPortAction_Open
-| SocketClientSideEmitChannel_SerialPortAction_Close
-| SocketClientSideEmitChannel_SerialPortAction_SendPacket
-| SocketClientSideEmitChannel_SerialPort_Handshake;
-
-export interface SocketClientSideEmitPayload_SerialPort_Open {
-    code: "serialport_open";
-    data: OpenSerialPortOptions;
+/** Payload of `serialport_state` (namespace mode). */
+export type SocketServerSideEmitPayload_State = SerialPortStateUpdate;
+/** Payload of `serialport_packet` (namespace mode): raw bytes. */
+export type SocketServerSideEmitPayload_Packet = SerialPortPacket;
+/** Payload of `serialport_drain` (namespace mode): none. */
+export type SocketServerSideEmitPayload_Drain = void;
+/** Payload of `serialport_mux_state` (mux mode). */
+export interface SocketServerSideEmitPayload_Mux_State extends SerialPortStateUpdate {
+    path: string;
 }
-
-export interface SocketClientSideEmitPayload_SerialPort_Close {
-    code: "serialport_close";
-
-    /**
-     * Serialport path (But it will be ignored by the server-side)
-     */
-    data: string;
+/** Payload of `serialport_mux_packet` (mux mode). */
+export interface SocketServerSideEmitPayload_Mux_Packet {
+    path: string;
+    data: SerialPortPacket;
 }
-
-export type SocketClientSideEmitPayload_SerialPort_SendPacket = Buffer | Array<number>;
-
-export interface SocketClientSideEmitPayload_SerialPort_Handshake {
-    code: "serialport_handshake";
-    data: OpenSerialPortOptions;
+/** Payload of `serialport_mux_drain` (mux mode). */
+export interface SocketServerSideEmitPayload_Mux_Drain {
+    path: string;
 }
 
 /**
- * Client-side emit to server-side
+ * Union of all server -> client payloads.
  *
- * Server-side should listen SocketClientSideEmitChannel and handle payload type according to the channel.
+ * Note: `serialport_packet` is a bare `Buffer | number[]`, so this union is intentionally not
+ * fully discriminated. Narrow via the channel name on the typed `emit` / `on` overloads.
  */
-export type SocketClientSideEmitPayload = SocketClientSideEmitPayload_SerialPort_Open
-| SocketClientSideEmitPayload_SerialPort_Close
-| SocketClientSideEmitPayload_SerialPort_SendPacket
-| SocketClientSideEmitPayload_SerialPort_Handshake;
+export type SocketServerSideEmitPayload = SocketServerSideEmitPayload_Handshake
+| SocketServerSideEmitPayload_State
+| SocketServerSideEmitPayload_Packet
+| SocketServerSideEmitPayload_Mux_State
+| SocketServerSideEmitPayload_Mux_Packet
+| SocketServerSideEmitPayload_Mux_Drain;
+
+/* ============================================================================
+ * Client -> Server
+ * ========================================================================== */
+
+/* ---- channels ---- */
+
+/**
+ * C->S (namespace mode): open the remote port for this connection.
+ *
+ * Sent automatically after handshake when the client was created with open options
+ * (`connect(namespace, options)`), or manually via `socket.open(options)` after `connect(namespace)`.
+ * Replaces the old "reply on the `serialport_handshake` channel" pattern.
+ */
+export type SocketClientSideEmitChannel_Open = "serialport_open";
+/** C->S (namespace mode): close the remote port for this connection. */
+export type SocketClientSideEmitChannel_Close = "serialport_close";
+/** C->S (namespace mode): write raw bytes to the remote serial port. */
+export type SocketClientSideEmitChannel_SendPacket = "serialport_send_packet";
+/** C->S (mux mode): open a remote port, tagged with `path`. */
+export type SocketClientSideEmitChannel_Mux_Open = "serialport_mux_open";
+/** C->S (mux mode): close a remote port, tagged with `path`. */
+export type SocketClientSideEmitChannel_Mux_Close = "serialport_mux_close";
+/** C->S (mux mode): write raw bytes to a remote serial port, tagged with `path`. */
+export type SocketClientSideEmitChannel_Mux_SendPacket = "serialport_mux_send_packet";
+
+export type SocketClientSideEmitChannel = SocketClientSideEmitChannel_Open
+| SocketClientSideEmitChannel_Close
+| SocketClientSideEmitChannel_SendPacket
+| SocketClientSideEmitChannel_Mux_Open
+| SocketClientSideEmitChannel_Mux_Close
+| SocketClientSideEmitChannel_Mux_SendPacket;
+
+/* ---- payloads ---- */
+
+/** Payload of `serialport_open` (namespace mode). */
+export type SocketClientSideEmitPayload_Open = SerialPortOpenRequest;
+/** Payload of `serialport_close` (namespace mode): none. */
+export type SocketClientSideEmitPayload_Close = void;
+/** Payload of `serialport_send_packet` (namespace mode): raw bytes. */
+export type SocketClientSideEmitPayload_SendPacket = SerialPortPacket;
+/** Payload of `serialport_mux_open` (mux mode). Same shape as namespace-mode open. */
+export type SocketClientSideEmitPayload_Mux_Open = SerialPortOpenRequest;
+/** Payload of `serialport_mux_close` (mux mode). */
+export interface SocketClientSideEmitPayload_Mux_Close {
+    path: string;
+}
+/** Payload of `serialport_mux_send_packet` (mux mode). */
+export interface SocketClientSideEmitPayload_Mux_SendPacket {
+    path: string;
+    data: SerialPortPacket;
+}
+
+/**
+ * Union of all client -> server payloads.
+ *
+ * Note: `serialport_send_packet` is a bare `Buffer | number[]`, so this union is intentionally not
+ * fully discriminated. Narrow via the channel name on the typed `emit` / `on` overloads.
+ */
+export type SocketClientSideEmitPayload = SocketClientSideEmitPayload_Open
+| SocketClientSideEmitPayload_SendPacket
+| SocketClientSideEmitPayload_Mux_Open
+| SocketClientSideEmitPayload_Mux_Close
+| SocketClientSideEmitPayload_Mux_SendPacket;
