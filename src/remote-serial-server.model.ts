@@ -1,6 +1,7 @@
 import { Server, Namespace, Socket } from "socket.io";
 
 import { SerialPortFactory, SerialPortListProvider } from "./serialport";
+import { Logger } from "./logger";
 
 import { RemoteSerialPortState,
     SerialPortPacket,
@@ -43,6 +44,22 @@ import { RemoteSerialPortState,
     SocketClientSideRpcPayload_Mux_Get,
     SocketRpcResponse_Status,
     SocketRpcResponse_List,
+    SocketClientSideTxnChannel_Begin,
+    SocketClientSideTxnChannel_Chunk,
+    SocketClientSideTxnChannel_End,
+    SocketClientSideTxnChannel_Abort,
+    SocketClientSideTxnChannel_Mux_Begin,
+    SocketClientSideTxnChannel_Mux_Chunk,
+    SocketClientSideTxnChannel_Mux_End,
+    SocketClientSideTxnChannel_Mux_Abort,
+    SocketClientSideTxnPayload_Begin,
+    SocketClientSideTxnPayload_Chunk,
+    SocketClientSideTxnPayload_End,
+    SocketClientSideTxnPayload_Abort,
+    SocketClientSideTxnPayload_Mux_Begin,
+    SocketClientSideTxnPayload_Mux_Chunk,
+    SocketClientSideTxnPayload_Mux_End,
+    SocketClientSideTxnPayload_Mux_Abort,
     SocketIONamespaceOnEvent } from "./index";
 
 /**
@@ -68,6 +85,46 @@ export interface RemoteSerialServerOptions {
      * in tests (the real `SerialPort.list()` does not see `SerialPortMock` ports).
      */
     port_list_provider?: SerialPortListProvider;
+    /**
+     * Logger sink. Default: warn/error -> `console`, debug/info discarded.
+     */
+    logger?: Logger;
+    /**
+     * Behavior when multiple clients connect to the same physical port path.
+     * - `'reject'` (default): the second client gets a `serialport_state: ERROR` (current behavior).
+     * - `'shared'`: clients share one refcounted `PortSession`; see {@link shared_mode}.
+     */
+    multi_access?: "reject" | "shared";
+    /**
+     * Scheduling/writer policy used when {@link multi_access} is `'shared'`. Ignored otherwise.
+     *
+     * - `'fifo'` (default): writes serialize by `serialport_send_begin` (or single-shot) arrival order;
+     *   head-of-line blocking on slow transactions.
+     * - `'fifo-strict'`: like `'fifo'`, but the server allows only one in-flight transaction across
+     *   all clients (stop-and-wait at the server). New `begin`s queue server-side until the current
+     *   txn fully drains.
+     * - `'batch'`: writes serialize by `serialport_send_end` arrival order (or single-shot arrival for
+     *   atomic packets); no head-of-line blocking — a transaction that finishes first ships first.
+     * - `'pipe'`: only the earliest-connected client is the writer; later clients are read-only.
+     *   Their writes are dropped (with a one-shot `serialport_state: ERROR` notice) but their send
+     *   window is still drained. When the writer disconnects, the next earliest live client is
+     *   auto-promoted to writer.
+     */
+    shared_mode?: "fifo" | "fifo-strict" | "batch" | "pipe";
+    /**
+     * Per-transaction timeout (ms). Reset whenever a new chunk arrives. If neither `serialport_send_end`
+     * nor `serialport_send_abort` arrives within the window of the last chunk, the buffered chunks are
+     * dropped. Default `5000`.
+     */
+    txn_timeout_ms?: number;
+    /**
+     * What to do when a transaction times out.
+     * - `'log'` (default): server logger `warn`, buffered chunks dropped silently from the client's view.
+     * - `'state'`: also emit `serialport_state: ERROR` to the originating client (note: this also
+     *   pollutes the port-level state machine).
+     * - `'both'`: log + state.
+     */
+    txn_timeout_action?: "log" | "state" | "both";
 }
 
 /**
@@ -134,6 +191,14 @@ export abstract class AbsRemoteSerialServerSocket {
     abstract on(channel: SocketClientSideRpcChannel_Get, listener: (data: Record<string, never>, ack: (response: SocketRpcResponse_Status) => void) => void): void;
     /** Client requests the host's serial port list; respond via the ack callback. */
     abstract on(channel: SocketClientSideRpcChannel_List, listener: (data: Record<string, never>, ack: (response: SocketRpcResponse_List) => void) => void): void;
+    /** Client starts a multi-chunk transaction. */
+    abstract on(channel: SocketClientSideTxnChannel_Begin, listener: (data: SocketClientSideTxnPayload_Begin) => void): void;
+    /** Client appends a chunk to an open transaction. */
+    abstract on(channel: SocketClientSideTxnChannel_Chunk, listener: (data: SocketClientSideTxnPayload_Chunk) => void): void;
+    /** Client closes a transaction; server schedules the buffered bytes for writing. */
+    abstract on(channel: SocketClientSideTxnChannel_End, listener: (data: SocketClientSideTxnPayload_End) => void): void;
+    /** Client aborts a transaction; server discards the buffered chunks. */
+    abstract on(channel: SocketClientSideTxnChannel_Abort, listener: (data: SocketClientSideTxnPayload_Abort) => void): void;
 
     /* ---- once (client -> server) ---- */
 
@@ -231,6 +296,14 @@ export abstract class AbsRemoteSerialServerMuxSocket {
     abstract on(channel: SocketClientSideRpcChannel_Mux_Get, listener: (data: SocketClientSideRpcPayload_Mux_Get, ack: (response: SocketRpcResponse_Status) => void) => void): void;
     /** Client requests the host's serial port list; respond via the ack callback. */
     abstract on(channel: SocketClientSideRpcChannel_List, listener: (data: Record<string, never>, ack: (response: SocketRpcResponse_List) => void) => void): void;
+    /** Client starts a multi-chunk transaction on a specific remote port. */
+    abstract on(channel: SocketClientSideTxnChannel_Mux_Begin, listener: (data: SocketClientSideTxnPayload_Mux_Begin) => void): void;
+    /** Client appends a chunk to an open transaction on a specific remote port. */
+    abstract on(channel: SocketClientSideTxnChannel_Mux_Chunk, listener: (data: SocketClientSideTxnPayload_Mux_Chunk) => void): void;
+    /** Client closes a transaction on a specific remote port. */
+    abstract on(channel: SocketClientSideTxnChannel_Mux_End, listener: (data: SocketClientSideTxnPayload_Mux_End) => void): void;
+    /** Client aborts a transaction on a specific remote port. */
+    abstract on(channel: SocketClientSideTxnChannel_Mux_Abort, listener: (data: SocketClientSideTxnPayload_Mux_Abort) => void): void;
 
     /* ---- once (client -> server) ---- */
 

@@ -40,7 +40,23 @@ import { RemoteSerialPortState,
     SocketClientSideRpcPayload_Update,
     SocketClientSideRpcPayload_Mux_Set,
     SocketClientSideRpcPayload_Mux_Update,
-    SocketClientSideRpcPayload_Mux_Flush } from "./index";
+    SocketClientSideRpcPayload_Mux_Flush,
+    SocketClientSideTxnChannel_Begin,
+    SocketClientSideTxnChannel_Chunk,
+    SocketClientSideTxnChannel_End,
+    SocketClientSideTxnChannel_Abort,
+    SocketClientSideTxnChannel_Mux_Begin,
+    SocketClientSideTxnChannel_Mux_Chunk,
+    SocketClientSideTxnChannel_Mux_End,
+    SocketClientSideTxnChannel_Mux_Abort,
+    SocketClientSideTxnPayload_Begin,
+    SocketClientSideTxnPayload_Chunk,
+    SocketClientSideTxnPayload_End,
+    SocketClientSideTxnPayload_Abort,
+    SocketClientSideTxnPayload_Mux_Begin,
+    SocketClientSideTxnPayload_Mux_Chunk,
+    SocketClientSideTxnPayload_Mux_End,
+    SocketClientSideTxnPayload_Mux_Abort } from "./index";
 
 /**
  * Open options passed to a local mock `SerialPortStream` (the virtual port the client app uses).
@@ -55,6 +71,29 @@ export interface OpenOptionsForSerialPortStream extends Partial<OpenOptions> {
  * @deprecated Misspelled. Use {@link OpenOptionsForSerialPortStream}. Kept as an alias for one release.
  */
 export type OpenOptoinsForSerialPortStream = OpenOptionsForSerialPortStream;
+
+/**
+ * Handle for a multi-chunk write transaction. Obtained from
+ * {@link AbsRemoteSerialportClientPortInstance.txn}; bytes accumulated via {@link write} are written
+ * to the remote physical port atomically on {@link end}, or discarded on {@link abort}.
+ *
+ * Backpressure: only `end()` consumes a slot in the client's send window (and waits for the
+ * server's drain ack); individual `write()` calls are free. The `end()` Promise resolves when the
+ * remote physical port has actually drained the bytes.
+ */
+export abstract class AbsRemoteSerialportClientTxnHandle {
+    /** Client-allocated transaction id, unique per socket. */
+    public abstract readonly txn_id: string;
+
+    /** Append a chunk to this transaction. Throws if the transaction is already ended or aborted. */
+    abstract write(chunk: Buffer | Array<number>): void;
+
+    /** Close the transaction. Resolves when the server has fully drained the bytes to the device. */
+    abstract end(): Promise<void>;
+
+    /** Discard the transaction; the server drops any buffered chunks. Subsequent `write` / `end` throw. */
+    abstract abort(): void;
+}
 
 /**
  * Encapsulates one local virtual (mock-backed) serial port — a mirror of one remote serial port.
@@ -85,6 +124,18 @@ export abstract class AbsRemoteSerialportClientPortInstance {
 
     /** Tear down this local virtual port (close the stream, drop the mock binding). */
     public abstract close(): void;
+
+    /**
+     * Begin a multi-chunk write transaction. Use when the client wants several writes treated as one
+     * atomic unit on the device side (vs single-shot `stream.write(buf)` which is its own atomic txn).
+     */
+    public abstract txn(): AbsRemoteSerialportClientTxnHandle;
+
+    /**
+     * Convenience wrapper around {@link txn}: opens a transaction, runs `fn` with the handle, then
+     * `end()`s it on success or `abort()`s it if `fn` throws.
+     */
+    public abstract with_txn<T>(fn: (handle: AbsRemoteSerialportClientTxnHandle) => Promise<T> | T): Promise<T>;
 }
 
 /**
@@ -116,6 +167,14 @@ export abstract class AbsRemoteSerialportClientSocket {
     abstract emit(channel: SocketClientSideRpcChannel_Update, message: SocketClientSideRpcPayload_Update): void;
     /** Flush the remote physical port's buffers (fire-and-forget). */
     abstract emit(channel: SocketClientSideRpcChannel_Flush): void;
+    /** Start a multi-chunk transaction (fire-and-forget; ack via subsequent `end`'s `serialport_drain`). */
+    abstract emit(channel: SocketClientSideTxnChannel_Begin, message: SocketClientSideTxnPayload_Begin): void;
+    /** Append a chunk to an open transaction (fire-and-forget; does not consume the send window). */
+    abstract emit(channel: SocketClientSideTxnChannel_Chunk, message: SocketClientSideTxnPayload_Chunk): void;
+    /** Close a transaction (consumes the send window; server emits `serialport_drain` when fully written). */
+    abstract emit(channel: SocketClientSideTxnChannel_End, message: SocketClientSideTxnPayload_End): void;
+    /** Abort a transaction (fire-and-forget; server discards buffered chunks). */
+    abstract emit(channel: SocketClientSideTxnChannel_Abort, message: SocketClientSideTxnPayload_Abort): void;
 
     /* ---- on (server -> client) ---- */
 
@@ -193,6 +252,14 @@ export abstract class AbsRemoteSerialportClientMuxSocket {
     abstract emit(channel: SocketClientSideRpcChannel_Mux_Update, message: SocketClientSideRpcPayload_Mux_Update): void;
     /** Flush a remote physical port's buffers (fire-and-forget). */
     abstract emit(channel: SocketClientSideRpcChannel_Mux_Flush, message: SocketClientSideRpcPayload_Mux_Flush): void;
+    /** Start a multi-chunk transaction on a specific remote port. */
+    abstract emit(channel: SocketClientSideTxnChannel_Mux_Begin, message: SocketClientSideTxnPayload_Mux_Begin): void;
+    /** Append a chunk to an open transaction on a specific remote port. */
+    abstract emit(channel: SocketClientSideTxnChannel_Mux_Chunk, message: SocketClientSideTxnPayload_Mux_Chunk): void;
+    /** Close a transaction on a specific remote port. */
+    abstract emit(channel: SocketClientSideTxnChannel_Mux_End, message: SocketClientSideTxnPayload_Mux_End): void;
+    /** Abort a transaction on a specific remote port. */
+    abstract emit(channel: SocketClientSideTxnChannel_Mux_Abort, message: SocketClientSideTxnPayload_Mux_Abort): void;
 
     /* ---- on (server -> client) ---- */
 

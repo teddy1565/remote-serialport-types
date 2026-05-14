@@ -288,3 +288,80 @@ export interface SocketRpcResponse_List {
     ports?: PortInfo[];
     message?: string;
 }
+
+/* ============================================================================
+ * Client -> Server multi-chunk transactions ("txn")
+ *
+ * For writes that span multiple chunks and must be treated as an atomic unit on the device side
+ * (e.g. network may delay/drop chunks; the server must not write a partial txn).
+ *
+ * Lifecycle: `serialport_send_begin` → 0..N `serialport_send_chunk` → `serialport_send_end`
+ * (or `serialport_send_abort` to discard buffered chunks).
+ *
+ * Backpressure semantics: only `serialport_send_end` (and the single-shot `serialport_send_packet`)
+ * consume the client's send window and get a `serialport_drain` ack from the server. `_begin`,
+ * `_chunk`, `_abort` do not.
+ *
+ * Server-side timeout (configurable, default 5s): if no `_end` / `_abort` arrives within the window
+ * after the last chunk, the txn is dropped (action configurable: log / state / both).
+ * ========================================================================== */
+
+/** C->S (namespace mode): start a multi-chunk transaction. */
+export type SocketClientSideTxnChannel_Begin = "serialport_send_begin";
+/** C->S (namespace mode): append a chunk to an open transaction. */
+export type SocketClientSideTxnChannel_Chunk = "serialport_send_chunk";
+/** C->S (namespace mode): close a transaction; the server schedules its buffered bytes for writing. */
+export type SocketClientSideTxnChannel_End = "serialport_send_end";
+/** C->S (namespace mode): abort a transaction; the server discards its buffered chunks. */
+export type SocketClientSideTxnChannel_Abort = "serialport_send_abort";
+/** C->S (mux mode): start a multi-chunk transaction on a specific remote port. */
+export type SocketClientSideTxnChannel_Mux_Begin = "serialport_mux_send_begin";
+/** C->S (mux mode): append a chunk on a specific remote port. */
+export type SocketClientSideTxnChannel_Mux_Chunk = "serialport_mux_send_chunk";
+/** C->S (mux mode): close a transaction on a specific remote port. */
+export type SocketClientSideTxnChannel_Mux_End = "serialport_mux_send_end";
+/** C->S (mux mode): abort a transaction on a specific remote port. */
+export type SocketClientSideTxnChannel_Mux_Abort = "serialport_mux_send_abort";
+
+export type SocketClientSideTxnChannel = SocketClientSideTxnChannel_Begin
+| SocketClientSideTxnChannel_Chunk
+| SocketClientSideTxnChannel_End
+| SocketClientSideTxnChannel_Abort
+| SocketClientSideTxnChannel_Mux_Begin
+| SocketClientSideTxnChannel_Mux_Chunk
+| SocketClientSideTxnChannel_Mux_End
+| SocketClientSideTxnChannel_Mux_Abort;
+
+/* ---- payloads ---- */
+
+export interface SocketClientSideTxnPayload_Begin {
+    /** Client-allocated transaction id, unique per socket. */
+    txn_id: string;
+}
+export interface SocketClientSideTxnPayload_Chunk {
+    txn_id: string;
+    data: SerialPortPacket;
+}
+export interface SocketClientSideTxnPayload_End {
+    txn_id: string;
+}
+export interface SocketClientSideTxnPayload_Abort {
+    txn_id: string;
+}
+export interface SocketClientSideTxnPayload_Mux_Begin {
+    path: string;
+    txn_id: string;
+}
+export interface SocketClientSideTxnPayload_Mux_Chunk {
+    path: string;
+    txn_id: string;
+    data: SerialPortPacket;
+}
+export interface SocketClientSideTxnPayload_Mux_End {
+    path: string;
+    txn_id: string;
+}
+export interface SocketClientSideTxnPayload_Mux_Abort {
+    path: string;
+    txn_id: string;
+}
