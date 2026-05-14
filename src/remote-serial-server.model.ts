@@ -1,7 +1,6 @@
-import { Server, Namespace, Socket } from "socket.io";
-
 import { SerialPortFactory, SerialPortListProvider } from "./serialport";
 import { Logger } from "./logger";
+import { AbsTransport, AbsTransportEndpoint, AbsTransportServer } from "./transport";
 
 import { RemoteSerialPortState,
     SerialPortPacket,
@@ -149,12 +148,13 @@ export interface AbsRemoteSerialServerSocketPort {
 }
 
 /**
- * Server side of one remote serial port, addressed by a socket.io namespace ("namespace mode").
+ * Server side of one remote serial port, addressed by an endpoint label (a socket.io namespace
+ * in the socket.io transport, "namespace mode").
  *
- * One per accepted connection; wraps the socket.io `Socket` plus the physical `SerialPort`.
+ * One per accepted connection; wraps the {@link AbsTransport} plus the physical `SerialPort`.
  */
 export abstract class AbsRemoteSerialServerSocket {
-    protected abstract _socket: Socket;
+    protected abstract _transport: AbsTransport;
 
     /** Current lifecycle state of the physical serial port. */
     abstract get state(): RemoteSerialPortState;
@@ -220,33 +220,30 @@ export abstract class AbsRemoteSerialServerSocket {
     abstract disconnect(close?: boolean): void;
 
     get id(): string {
-        return this._socket.id;
+        return this._transport.id;
     }
 
     get connected(): boolean {
-        return this._socket.connected;
+        return this._transport.is_connected;
     }
 
     get disconnected(): boolean {
-        return this._socket.disconnected;
-    }
-
-    get nsp() {
-        return this._socket.nsp;
+        return !this._transport.is_connected;
     }
 
     /**
-     * The serial port path derived from the socket.io namespace.
+     * The serial port path derived from the transport's endpoint label.
      *
-     * On Windows the path is like `COM1`; the socket.io namespace must be `/COM1`, so the leading
-     * slash is stripped here. On Linux the path is like `/dev/ttyUSB0` and is returned as-is.
+     * On Windows the path is like `COM1`; the socket.io namespace is `/COM1`, so the leading slash
+     * is stripped here. On Linux the path is like `/dev/ttyUSB0` and is returned as-is. For
+     * non-socket.io transports the endpoint label may be anything the concrete transport assigns.
      *
      * Note: when the server runs with `strict_path` disabled, the *actual* port path may come from
-     * the client's open request instead; this getter still returns the namespace-derived value.
+     * the client's open request instead; this getter still returns the endpoint-label-derived value.
      * @param filter_regex - regexp deciding when to strip the leading slash (default: `/^(\/COM)[0-9]+$/`)
      */
     public get_serial_path(filter_regex: string | RegExp = /^(\/COM)[0-9]+$/): string {
-        const origin_namespace = this._socket.nsp.name;
+        const origin_namespace = this._transport.endpoint_label;
 
         if (origin_namespace.match(filter_regex) !== null) {
             return origin_namespace.replace("/", "");
@@ -262,11 +259,12 @@ export abstract class AbsRemoteSerialServerSocket {
 }
 
 /**
- * Server side of a *mux* connection: one socket on a "mux namespace" carrying any number of remote
- * serial ports, each addressed by `path` inside the payloads ("mux mode" — dynamic addressing).
+ * Server side of a *mux* connection: one transport on a "mux endpoint" carrying any number of
+ * remote serial ports, each addressed by `path` inside the payloads ("mux mode" — dynamic
+ * addressing).
  */
 export abstract class AbsRemoteSerialServerMuxSocket {
-    protected abstract _socket: Socket;
+    protected abstract _transport: AbsTransport;
 
     /** Current lifecycle state of the remote port at `path` (`IDLE` if unknown). */
     abstract get_state(path: string): RemoteSerialPortState;
@@ -319,30 +317,32 @@ export abstract class AbsRemoteSerialServerMuxSocket {
 }
 
 /**
- * Wrapper around a socket.io namespace that emits {@link AbsRemoteSerialServerSocket}s on `connection`.
+ * Wrapper around an {@link AbsTransportEndpoint} that emits {@link AbsRemoteSerialServerSocket}s
+ * on `connection`.
  */
 export abstract class AbsRemoteSerialServerSocketNamespace<T extends AbsRemoteSerialServerSocket> {
-    protected abstract _namespace: Namespace;
+    protected abstract _endpoint: AbsTransportEndpoint;
 
     /**
-     * Adds a listener for a namespace-level event (`connection` / `disconnect` / `error`).
+     * Adds a listener for an endpoint-level event (`connection` / `disconnect` / `error`).
      * The `connection` listener receives a wrapped {@link AbsRemoteSerialServerSocket}.
      */
     abstract on(ev: SocketIONamespaceOnEvent, listener: (socket: T) => void): void;
 }
 
 /**
- * Wrapper around a socket.io namespace that emits {@link AbsRemoteSerialServerMuxSocket}s on `connection`.
+ * Wrapper around an {@link AbsTransportEndpoint} that emits {@link AbsRemoteSerialServerMuxSocket}s
+ * on `connection`.
  */
 export abstract class AbsRemoteSerialServerMuxSocketNamespace<M extends AbsRemoteSerialServerMuxSocket> {
-    protected abstract _namespace: Namespace;
+    protected abstract _endpoint: AbsTransportEndpoint;
 
     abstract on(ev: SocketIONamespaceOnEvent, listener: (socket: M) => void): void;
 }
 
 /**
- * Top-level server: owns the socket.io `Server` and exposes namespace-mode (`of`) and mux-mode (`mux`)
- * endpoints.
+ * Top-level server: owns the {@link AbsTransportServer} and exposes namespace-mode (`of`) and
+ * mux-mode (`mux`) endpoints.
  */
 export abstract class AbsRemoteSerialServer<
     T extends AbsRemoteSerialServerSocket,
@@ -352,7 +352,7 @@ export abstract class AbsRemoteSerialServer<
 > {
     protected abstract SERIALPORT_NAMESPACE_REGEXP: RegExp | string;
     protected abstract SERVER_PORT: number;
-    protected abstract io: Server;
+    protected abstract _transport_server: AbsTransportServer;
 
     /** When `true`, validate/force `options.path` against the namespace regexp (see {@link RemoteSerialServerOptions}). */
     protected abstract strict_path: boolean;
@@ -360,54 +360,57 @@ export abstract class AbsRemoteSerialServer<
     protected abstract auto_pipe: boolean;
 
     /**
-     * Create a wrapped server socket for an accepted connection.
+     * Create a wrapped server socket for an accepted transport.
      *
      * The concrete implementation injects the physical-port factory ({@link SerialPortFactory}) so the
      * actual `SerialPort` can be substituted (e.g. a mock in tests).
-     * @param socket - socket.io socket instance
+     * @param transport - per-connection transport instance
      */
-    protected abstract create_remote_serial_server_socket_port(socket: Socket): T;
+    protected abstract create_remote_serial_server_socket_port(transport: AbsTransport): T;
 
     /**
-     * Create a wrapped namespace. Namespaces are unique; the same namespace returns the same wrapper.
+     * Create a wrapped namespace. Endpoints are unique per label; the same label returns the same
+     * wrapper.
      *
-     * The concrete implementation must hand the namespace wrapper the per-socket factory above, so
-     * each `socket.id` maps to exactly one {@link AbsRemoteSerialServerSocket}.
-     * @param namespace - socket.io namespace instance
+     * The concrete implementation must hand the namespace wrapper the per-transport factory above,
+     * so each transport `id` maps to exactly one {@link AbsRemoteSerialServerSocket}.
+     * @param endpoint - underlying transport endpoint
      */
-    protected abstract create_remote_serial_server_socket_namespace(namespace: Namespace): U;
+    protected abstract create_remote_serial_server_socket_namespace(endpoint: AbsTransportEndpoint): U;
 
-    /** Create a wrapped mux server socket for an accepted connection on a mux namespace. */
-    protected abstract create_remote_serial_server_mux_socket(socket: Socket): M;
+    /** Create a wrapped mux server socket for an accepted transport on a mux endpoint. */
+    protected abstract create_remote_serial_server_mux_socket(transport: AbsTransport): M;
 
     /** Create a wrapped mux namespace. */
-    protected abstract create_remote_serial_server_mux_socket_namespace(namespace: Namespace): MN;
+    protected abstract create_remote_serial_server_mux_socket_namespace(endpoint: AbsTransportEndpoint): MN;
 
     /**
      * Start listening for incoming connections.
-     * @param serverport - port number (default: the configured `SERVER_PORT`)
+     * @param serverport - port number (default: the configured `SERVER_PORT`). Ignored by
+     *   transports that don't listen on TCP (e.g. IPC).
      */
     public listen(serverport: number = this.SERVER_PORT): void {
-        this.io.listen(serverport);
+        this._transport_server.listen(serverport);
     }
 
     /**
-     * Get the namespace-mode endpoint for the given namespace (one remote serial port per connection).
-     * Duplicate namespaces return the same wrapper.
-     * @param namespace - namespace (or regexp) to accept connections on; defaults to the configured regexp
+     * Get the namespace-mode endpoint for the given label (one remote serial port per connection).
+     * Duplicate labels return the same wrapper.
+     * @param namespace - endpoint label (or regexp) to accept connections on; defaults to the
+     *   configured regexp
      */
     public of(namespace: string | RegExp = this.SERIALPORT_NAMESPACE_REGEXP): U {
-        const namespaceInstance = this.io.of(namespace);
-        return this.create_remote_serial_server_socket_namespace(namespaceInstance);
+        const endpointInstance = this._transport_server.of(namespace);
+        return this.create_remote_serial_server_socket_namespace(endpointInstance);
     }
 
     /**
-     * Get the mux-mode endpoint on the given mux namespace (many remote ports per connection,
+     * Get the mux-mode endpoint on the given label (many remote ports per connection,
      * addressed dynamically by `path`).
-     * @param namespace - mux namespace (or regexp); defaults to `/`
+     * @param namespace - mux endpoint label (or regexp); defaults to `/`
      */
     public mux(namespace: string | RegExp = "/"): MN {
-        const namespaceInstance = this.io.of(namespace);
-        return this.create_remote_serial_server_mux_socket_namespace(namespaceInstance);
+        const endpointInstance = this._transport_server.of(namespace);
+        return this.create_remote_serial_server_mux_socket_namespace(endpointInstance);
     }
 }

@@ -1,4 +1,4 @@
-import { Manager, Socket } from "socket.io-client";
+import { AbsTransport, AbsTransportClient } from "./transport";
 
 import { OpenSerialPortOptions, SetOptions, UpdateOptions, PortStatus, PortInfo } from "./serialport";
 
@@ -139,13 +139,14 @@ export abstract class AbsRemoteSerialportClientPortInstance {
 }
 
 /**
- * Client side of one remote serial port, addressed by a socket.io namespace ("namespace mode").
+ * Client side of one remote serial port, addressed by an endpoint label (a socket.io namespace
+ * in the socket.io transport, "namespace mode").
  *
- * One of these per {@link AbsRemoteSerialportClient.connect}; one socket connection (multiplexed over
- * the shared `Manager`) per remote port.
+ * One of these per {@link AbsRemoteSerialportClient.connect}; one multiplexed transport (over the
+ * shared {@link AbsTransportClient}) per remote port.
  */
 export abstract class AbsRemoteSerialportClientSocket {
-    protected abstract _socket: Socket;
+    protected abstract _transport: AbsTransport;
 
     /** Open options used to open the remote port. `null` until {@link open} is called in manual mode. */
     protected abstract _open_options: OpenSerialPortOptions | null;
@@ -228,12 +229,12 @@ export abstract class AbsRemoteSerialportClientSocket {
 }
 
 /**
- * Client side of a *mux* connection: one socket on a "mux namespace", carrying any number of remote
- * serial ports, each addressed by `path` inside the payloads ("mux mode" — for dynamic addressing,
- * e.g. IoT mesh, where you don't want a namespace per port).
+ * Client side of a *mux* connection: one transport on a "mux endpoint", carrying any number of
+ * remote serial ports, each addressed by `path` inside the payloads ("mux mode" — for dynamic
+ * addressing, e.g. IoT mesh, where you don't want a namespace per port).
  */
 export abstract class AbsRemoteSerialportClientMuxSocket {
-    protected abstract _socket: Socket;
+    protected abstract _transport: AbsTransport;
 
     /** Current lifecycle state of the remote port at `path` (`IDLE` if unknown). */
     abstract get_state(path: string): RemoteSerialPortState;
@@ -307,16 +308,17 @@ export abstract class AbsRemoteSerialportClientMuxSocket {
 }
 
 /**
- * Top-level client: holds one socket.io `Manager` (one transport connection) and creates
+ * Top-level client: holds one {@link AbsTransportClient} (one underlying wire) and creates
  * {@link AbsRemoteSerialportClientSocket} / {@link AbsRemoteSerialportClientMuxSocket} over it.
  *
- * Multiple `connect()` / `mux()` calls reuse the same transport (socket.io namespace multiplexing),
- * so one TCP/WS connection can carry many remote serial ports.
+ * Multiple `connect()` / `mux()` calls reuse the same wire (socket.io namespace multiplexing for
+ * the socket.io transport, envelope-level `ns` field for IPC), so one connection can carry many
+ * remote serial ports.
  */
 export abstract class AbsRemoteSerialportClient {
 
-    /** Shared socket.io client manager (one underlying transport connection). */
-    protected abstract readonly client_manager: Manager;
+    /** Shared client-side transport (one underlying wire). */
+    protected abstract readonly _transport_client: AbsTransportClient;
 
     /** Regexp used to validate namespaces (and, in strict mode, remote serial paths). */
     protected abstract readonly serialport_check_regexp: RegExp | string;
@@ -329,26 +331,27 @@ export abstract class AbsRemoteSerialportClient {
 
     /**
      * Connect to a remote serial port (namespace mode) and open it automatically using `options`.
-     * @param namespace - socket.io namespace, e.g. `/dev/ttyUSB0` or `/COM5`
+     * @param namespace - endpoint label, e.g. `/dev/ttyUSB0` or `/COM5`
      * @param options - serial port open options; `options.path` is the real remote path (defaults to the namespace)
      */
     abstract connect(namespace: string, options: OpenSerialPortOptions): AbsRemoteSerialportClientSocket;
     /**
      * Connect to a remote serial port (namespace mode) without opening it yet.
      * Call {@link AbsRemoteSerialportClientSocket.open} later to open it.
-     * @param namespace - socket.io namespace, e.g. `/dev/ttyUSB0` or `/COM5`
+     * @param namespace - endpoint label, e.g. `/dev/ttyUSB0` or `/COM5`
      */
     abstract connect(namespace: string): AbsRemoteSerialportClientSocket;
 
     /**
-     * Open (or reuse) a mux connection on the given mux namespace, then address remote ports
+     * Open (or reuse) a mux connection on the given mux endpoint, then address remote ports
      * dynamically via {@link AbsRemoteSerialportClientMuxSocket.open}.
-     * @param namespace - mux namespace (default `/`); may be chosen dynamically, e.g. `/site-A`
+     * @param namespace - mux endpoint label (default `/`); may be chosen dynamically, e.g. `/site-A`
      */
     abstract mux(namespace?: string): AbsRemoteSerialportClientMuxSocket;
 
     /**
-     * Disconnect one namespace's socket, or (no argument) disconnect everything and close the transport.
+     * Disconnect one namespace's socket, or (no argument) disconnect everything and close the
+     * underlying wire.
      */
     abstract disconnect(namespace?: string): void;
 }
