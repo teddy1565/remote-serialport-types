@@ -108,8 +108,26 @@ export interface RemoteSerialServerOptions {
      *   Their writes are dropped (with a one-shot `serialport_state: ERROR` notice) but their send
      *   window is still drained. When the writer disconnects, the next earliest live client is
      *   auto-promoted to writer.
+     * - `'cow-write-isolate'`: shared fanout + best-effort echo filter. The server remembers each
+     *   subscriber's most recent write and routes any device bytes that prefix-match it back to
+     *   that subscriber only; unmatched bytes fan out to everyone. Devices that transform written
+     *   bytes (e.g. add `\r\n`, transcode) defeat the filter — those bytes fan out as normal.
+     * - `'cow-snapshot'`: shared fanout + per-subscriber catch-up. The server keeps a ring buffer
+     *   (size {@link cow_snapshot_buffer_bytes}, default 64 KB) of recent device output; on subscribe
+     *   the buffer is replayed to the new client as `serialport_packet`s before live forwarding
+     *   begins. Live data arriving during replay is queued per-subscriber then flushed.
+     * - `'cow-virtual-port'`: each subscriber sees its own logical port state. The server tracks
+     *   per-client `set`/`update` calls and answers `get` from that per-client view. Writes to the
+     *   physical port apply last-write-wins (with a logger warning on conflict). Useful when many
+     *   clients need to *think* they own the port; in reality they still share the same hardware.
      */
-    shared_mode?: "fifo" | "fifo-strict" | "batch" | "pipe";
+    shared_mode?: "fifo" | "fifo-strict" | "batch" | "pipe" | "cow-write-isolate" | "cow-snapshot" | "cow-virtual-port";
+    /**
+     * Size (bytes) of the per-path ring buffer used by {@link shared_mode} `'cow-snapshot'`. Older
+     * bytes are discarded as the buffer fills. Default `65536` (64 KB). Ignored unless
+     * `shared_mode === 'cow-snapshot'`.
+     */
+    cow_snapshot_buffer_bytes?: number;
     /**
      * Per-transaction timeout (ms). Reset whenever a new chunk arrives. If neither `serialport_send_end`
      * nor `serialport_send_abort` arrives within the window of the last chunk, the buffered chunks are
@@ -124,6 +142,72 @@ export interface RemoteSerialServerOptions {
      * - `'both'`: log + state.
      */
     txn_timeout_action?: "log" | "state" | "both";
+    /**
+     * Optional credential validator. Called once per accepted transport (and again on reconnect).
+     * Receives the credential the client put in its `auth` field (socket.io
+     * `Manager({auth: ...})` or IPC hello envelope). Return `{ok: false, message}` to reject the
+     * connection; return `{ok: true, identity}` to accept and tag the connection with an
+     * app-defined `identity` for downstream {@link RemoteSerialServerAcl} hooks.
+     *
+     * If unset, every connection is accepted with `identity = null`.
+     */
+    auth_validator?: AuthValidator;
+    /**
+     * Optional per-operation access-control hooks. Each hook receives the `identity` produced by
+     * {@link auth_validator} (or `null` if no validator is set) plus the contextual path.
+     *
+     * - `can_open(identity, path)` → if `false`, `serialport_open` is rejected with
+     *   `serialport_state: ERROR { message: "open denied: ..." }`.
+     * - `can_write(identity, path)` → if `false`, the packet/txn is dropped, the originating client
+     *   gets `serialport_state: ERROR { message: "write denied: ..." }`, **but the backpressure
+     *   window is still drained** (so subsequent legitimate writes don't stall).
+     * - `can_read(identity, path)` → if `false`, no `serialport_packet` / `serialport_mux_packet`
+     *   is forwarded to this client; a one-shot `serialport_state: ERROR { message: "read denied: ..." }`
+     *   is sent on open so the client surface (local virtual stream `'error'`) can report it.
+     */
+    acl?: RemoteSerialServerAcl;
+}
+
+/**
+ * Result of an {@link AuthValidator}.
+ */
+export interface AuthResult {
+    /** `false` to reject the connection. */
+    ok: boolean;
+    /** App-defined identity tag, propagated to {@link RemoteSerialServerAcl} hooks. Ignored when `ok === false`. */
+    identity?: unknown;
+    /** Human-readable rejection reason, sent to the client on failure (via `serialport_state: ERROR`). */
+    message?: string;
+}
+
+/**
+ * Metadata passed to an {@link AuthValidator} alongside the client-supplied credential.
+ */
+export interface AuthTransportMeta {
+    /** Stable transport id (e.g. `socket.id` on socket.io, UUID on IPC). */
+    transport_id: string;
+    /** Endpoint label this transport connected on. */
+    endpoint_label: string;
+}
+
+/**
+ * Validator function for {@link RemoteSerialServerOptions.auth_validator}.
+ *
+ * `credential` is whatever the client put in its `auth` field (the library does not parse it —
+ * apps are free to use JWTs, API keys, mTLS-derived ids, etc.).
+ */
+export type AuthValidator = (credential: unknown, meta: AuthTransportMeta) => AuthResult | Promise<AuthResult>;
+
+/**
+ * Per-operation access-control hooks. All hooks are optional; missing hooks default to "allow".
+ *
+ * `identity` is what the {@link AuthValidator} returned (or `null` if no validator was set).
+ * Hooks may be sync or async; ACL is consulted only on the *initial* call (no per-byte checks).
+ */
+export interface RemoteSerialServerAcl {
+    can_open?: (identity: unknown, path: string) => boolean | Promise<boolean>;
+    can_write?: (identity: unknown, path: string) => boolean;
+    can_read?: (identity: unknown, path: string) => boolean;
 }
 
 /**
@@ -161,6 +245,13 @@ export abstract class AbsRemoteSerialServerSocket {
 
     /** Proxy of the physical serial port (see {@link AbsRemoteSerialServerSocketPort}). */
     abstract get port(): AbsRemoteSerialServerSocketPort;
+
+    /**
+     * Identity tagged onto this connection by {@link AuthValidator}, or `null` if no validator
+     * was configured / the connection was accepted unauthenticated. Set once after `auth_validator`
+     * resolves; not mutated thereafter (a reconnect produces a fresh wrapped socket).
+     */
+    abstract get identity(): unknown;
 
     /* ---- emit (server -> client) ---- */
 
@@ -265,6 +356,12 @@ export abstract class AbsRemoteSerialServerSocket {
  */
 export abstract class AbsRemoteSerialServerMuxSocket {
     protected abstract _transport: AbsTransport;
+
+    /**
+     * Identity tagged onto this mux connection by {@link AuthValidator}, or `null` if no
+     * validator was configured. Set once; not mutated thereafter.
+     */
+    abstract get identity(): unknown;
 
     /** Current lifecycle state of the remote port at `path` (`IDLE` if unknown). */
     abstract get_state(path: string): RemoteSerialPortState;

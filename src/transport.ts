@@ -65,6 +65,19 @@ export abstract class AbsTransport {
      */
     abstract get endpoint_label(): string;
 
+    /**
+     * Credential the peer sent during the transport handshake (server-side view), or `undefined`
+     * if none / not applicable. The library passes this to `auth_validator` to gate connections.
+     *
+     * - socket.io: returns `socket.handshake.auth` (set by the client via `Manager({auth: ...})`).
+     * - Node IPC: returns whatever the client sent in its initial `hello` envelope; the endpoint
+     *   delays firing `on_connection` until that envelope arrives, so this getter is populated by
+     *   the time consumer code observes the new transport.
+     * - Client-side transports return `undefined` (the server doesn't send a peer credential to
+     *   the client).
+     */
+    abstract get credential(): unknown;
+
     /* ---- send ---- */
 
     /** Send a one-way message on `channel`. No response expected. */
